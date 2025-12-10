@@ -37,8 +37,8 @@ const auroraFragmentShader = `
   varying vec3 vWorldPosition;
   
   // Simplex noise
-  vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-  vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec3 mod289(vec3 x) { return x - floor(x / 289.0) * 289.0; }
+  vec2 mod289(vec2 x) { return x - floor(x / 289.0) * 289.0; }
   vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
   
   float snoise(vec2 v) {
@@ -71,7 +71,8 @@ const auroraFragmentShader = `
     float horizontalPos = vUv.x;
     
     // Use world position Y for height (more accurate than UV.y on sphere)
-    vec3 dir = normalize(vWorldPosition);
+    float len = length(vWorldPosition);
+    vec3 dir = len > 0.0001 ? vWorldPosition / len : vec3(0.0, 1.0, 0.0);
     float worldHeight = dir.y;
     
     // Below horizon - solid sky color

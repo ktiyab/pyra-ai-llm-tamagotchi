@@ -64,7 +64,7 @@ class AudioService {
 
     await Promise.all(promises);
     this.loaded = true;
-    console.log("🦕 Audio Assets Loaded");
+    console.log("ðŸ¦• Audio Assets Loaded");
   }
 
   private playBuffer(name: string, volume: number = 1.0, playbackRate: number = 1.0) {
@@ -118,7 +118,7 @@ class AudioService {
       t + AMBIENT_CONFIG.fadeInDuration
     );
     
-    console.log("🎵 Ambient music started");
+    console.log("ðŸŽµ Ambient music started");
   }
 
   stopAmbientMusic() {
@@ -139,7 +139,7 @@ class AudioService {
     this.ambientGain = null;
     this.ambientPlaying = false;
     
-    console.log("🎵 Ambient music stopped");
+    console.log("ðŸŽµ Ambient music stopped");
   }
 
   setAmbientVolume(volume: number) {
@@ -380,4 +380,4 @@ class AudioService {
   }
 }
 
-export const audioService = new AudioService();
+export const audioService = new AudioService(

@@ -148,7 +148,7 @@ const Flowers: React.FC<FlowersProps> = ({ creaturePosition, creatureScale, scro
         <mesh
           key={`${scrollSeed}-${flower.id}`} // FIXED: Key includes seed for proper React reconciliation
           geometry={sphereGeo}
-          position={flower.position}
+          position={flower.position.toArray()}
           scale={flower.scale}
         >
           <meshLambertMaterial

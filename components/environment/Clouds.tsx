@@ -140,12 +140,12 @@ const Clouds: React.FC<CloudsProps> = ({ timeOfDay, worldOffset }) => {
   return (
     <group ref={groupRef}>
       {clouds.map((cloud) => (
-        <group key={cloud.id} position={cloud.position} scale={cloud.scale}>
+        <group key={cloud.id} position={cloud.position.toArray()} scale={cloud.scale}>
           {cloud.parts.map((part, partIdx) => (
             <mesh
               key={partIdx}
               geometry={sphereGeo}
-              position={part.offset}
+              position={part.offset.toArray()}
               scale={part.scale}
             >
               <meshLambertMaterial
