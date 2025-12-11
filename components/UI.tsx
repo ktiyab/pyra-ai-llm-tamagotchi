@@ -210,8 +210,11 @@ const PersonalityPanel: React.FC<PersonalityPanelProps> = ({ personality, domina
           <span className="text-xs font-bold text-stone-300 uppercase tracking-wider">Personality</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className={`px-2 py-0.5 rounded text-xs font-black ${gradeConfig.bg}`} style={{ color: gradeConfig.color }}>
-            {careGrade}
+          {/* FIXED: Added label inline to explain care grade meaning */}
+          <div className={`px-2 py-0.5 rounded text-xs font-black ${gradeConfig.bg} flex items-center gap-1`} style={{ color: gradeConfig.color }}>
+            <span>{careGrade}</span>
+            <span className="font-medium opacity-80">·</span>
+            <span className="font-medium">{gradeConfig.label}</span>
           </div>
           {isExpanded ? <Icons.ChevronUp className="w-4 h-4 text-stone-500" /> : <Icons.ChevronDown className="w-4 h-4 text-stone-500" />}
         </div>
@@ -239,6 +242,123 @@ const PersonalityPanel: React.FC<PersonalityPanelProps> = ({ personality, domina
             <Icons.Book className="w-4 h-4 text-cyan-400" />
             <span className="text-xs text-stone-300">View Memories</span>
           </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =============================================
+// OBEDIENCE HISTORY PANEL (Training/Commands)
+// =============================================
+
+interface ObedienceHistoryPanelProps {
+  obedienceHistory: ObedienceRecord[];
+  stage: Stage;
+}
+
+const ObedienceHistoryPanel: React.FC<ObedienceHistoryPanelProps> = ({ obedienceHistory, stage }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const isEgg = stage === Stage.EGG;
+  const isHatchling = stage === Stage.HATCHLING;
+  const canUnderstandCommands = !isEgg && !isHatchling;
+  
+  const recentCommands = obedienceHistory.slice(-5);
+  const successCount = recentCommands.filter(r => r.result === 'obeyed' || r.result === 'partial').length;
+  const successRate = recentCommands.length > 0 ? Math.round((successCount / recentCommands.length) * 100) : 0;
+  
+  const getResultDisplay = (result: 'obeyed' | 'partial' | 'refused' | 'ignored') => {
+    switch (result) {
+      case 'obeyed': return { icon: '✓', color: 'text-green-400', label: 'obeyed' };
+      case 'partial': return { icon: '~', color: 'text-yellow-400', label: 'tried' };
+      case 'refused': return { icon: '✗', color: 'text-red-400', label: 'refused' };
+      case 'ignored': return { icon: '?', color: 'text-stone-500', label: 'ignored' };
+    }
+  };
+  
+  const getCommandHints = (): string[] => {
+    switch (stage) {
+      case Stage.PUPPY: return ['come', 'sit', 'stay'];
+      case Stage.JUVENILE: return ['come', 'sit', 'stay', 'speak', 'fetch'];
+      case Stage.ADOLESCENT: return ['come', 'sit', 'stay', 'speak', 'quiet'];
+      case Stage.ADULT: return ['come', 'sit', 'stay', 'speak', 'fetch', 'quiet'];
+      default: return [];
+    }
+  };
+
+  return (
+    <div className="bg-stone-900/60 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden">
+      <button 
+        onClick={() => setIsExpanded(!isExpanded)} 
+        className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-base">🎓</span>
+          <span className="text-xs font-bold text-stone-300 uppercase tracking-wider">Training</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {canUnderstandCommands && recentCommands.length > 0 && (
+            <span className={`text-xs font-bold ${
+              successRate >= 70 ? 'text-green-400' : 
+              successRate >= 40 ? 'text-yellow-400' : 'text-red-400'
+            }`}>
+              {successRate}%
+            </span>
+          )}
+          {isExpanded ? <Icons.ChevronUp className="w-4 h-4 text-stone-500" /> : <Icons.ChevronDown className="w-4 h-4 text-stone-500" />}
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="px-3 pb-3 space-y-3">
+          {isEgg && (
+            <div className="text-xs text-stone-500 italic text-center py-2">
+              The egg cannot hear commands yet...
+            </div>
+          )}
+          
+          {isHatchling && (
+            <div className="text-xs text-stone-500 italic text-center py-2">
+              Pyra is too young to understand commands. Wait until Puppy stage.
+            </div>
+          )}
+          
+          {canUnderstandCommands && (
+            <>
+              {recentCommands.length > 0 ? (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-stone-500 uppercase tracking-wider">Recent Commands</div>
+                  {recentCommands.map((record, idx) => {
+                    const display = getResultDisplay(record.result);
+                    return (
+                      <div key={idx} className="flex items-center justify-between text-xs bg-white/5 rounded-lg px-2 py-1.5">
+                        <span className="text-stone-300">"{record.command}"</span>
+                        <span className={`${display.color} font-medium`}>
+                          {display.icon} {display.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs text-stone-500 italic text-center py-2">
+                  No commands given yet. Try talking to Pyra!
+                </div>
+              )}
+              
+              <div className="pt-2 border-t border-white/5">
+                <div className="text-[10px] text-stone-500 uppercase tracking-wider mb-1.5">Try saying in chat:</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {getCommandHints().map(cmd => (
+                    <span key={cmd} className="px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded-full text-[10px] text-purple-300">
+                      "Pyra, {cmd}!"
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -477,6 +597,11 @@ const StatsPanel = ({ game, onOpenMemories }: { game: GameContextType; onOpenMem
               careGrade={state.learnedBehavior.aggregates.careGrade}
               onOpenMemories={onOpenMemories}
             />
+            {/* FIXED: Added Obedience History Panel for training discoverability */}
+            <ObedienceHistoryPanel
+              obedienceHistory={state.obedienceHistory}
+              stage={state.stage}
+            />            
           </>
         )}
       </div>
@@ -571,6 +696,8 @@ const ActionBar = ({ game }: { game: GameContextType }) => {
       <ActionButton label="Clean" icon={<Icons.Sparkles className="w-6 h-6" />} color="#38bdf8" onClick={() => interact('clean')} cooldownSeconds={5} urgent={state.needs.cleanliness < 40} tooltipText={state.needs.cleanliness < 40 ? "Messy!" : "Keep tidy."} />
       <ActionButton label="Love" icon={<Icons.Heart className="w-6 h-6" />} color="#f4845f" onClick={() => interact('pet')} cooldownSeconds={10} urgent={state.needs.attention < 30} tooltipText="Show affection." />
       <ActionButton label="Play" icon={<Icons.Ball className="w-6 h-6" />} color="#90be6d" onClick={() => interact('play')} cooldownSeconds={45} urgent={state.needs.play < 30} tooltipText="Play fetch!" />
+      {/* FIXED: Added Warm button - warmth decays post-hatch but had no UI to replenish */}
+      <ActionButton label="Warm" icon={<Icons.Flame className="w-6 h-6" />} color="#f97316" onClick={() => interact('warm')} cooldownSeconds={20} urgent={state.needs.warmth < 30} tooltipText={state.needs.warmth < 30 ? "Cold!" : "Keep cozy."} />
       {contextualAction && (
         <>
           <div className="w-px h-8 bg-white/10 mx-1" />
