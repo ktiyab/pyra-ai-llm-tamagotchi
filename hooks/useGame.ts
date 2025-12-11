@@ -20,7 +20,7 @@ import { generateCatResponse, AudioInput } from '../services/geminiService';
 import { audioService } from '../services/audioService';
 import { animController } from '../services/animationController';
 import { behaviorService } from '../services/behaviorService';
-import { clearPortraitCache } from '../services/geminiService';
+import { clearPortraitCache, preloadTemplateImage } from '../services/geminiService';
 
 // FIXED: Updated storage key for new learned behavior system
 // const STORAGE_KEY = 'mochi_pyra_state_v3';
@@ -1649,6 +1649,13 @@ export const useGame = () => {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // Preload T-Rex template for portrait generation
+  useEffect(() => {
+    preloadTemplateImage().catch(() => {
+      // Silent fail - template will be fetched when needed
+    });
+  }, []);
 
   // FIXED: Wrapped dispatch that handles behavior evaluation
   const dispatch = useCallback((action: GameAction) => {

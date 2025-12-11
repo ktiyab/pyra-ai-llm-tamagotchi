@@ -437,11 +437,57 @@ const extractPartialResponse = (text: string): Partial<LLMResponse> | null => {
 };
 
 // =============================================
-// PYRA PORTRAIT GENERATION (Nano Banana)
+// PYRA PORTRAIT GENERATION (Nano Banana with Reference Image)
 // =============================================
 
 const PORTRAIT_CACHE_PREFIX = 'pyra_portrait_';
-const PORTRAIT_CACHE_VERSION = 'v1';
+const PORTRAIT_CACHE_VERSION = 'v2'; // FIXED: Bumped version for new generation method
+const TREX_TEMPLATE_URL = 'https://storage.googleapis.com/vai-pet/Trex_Template.jpg';
+
+// Cache for the template image (avoid re-fetching)
+let templateImageCache: { data: string; mimeType: string } | null = null;
+
+/**
+ * Fetches and caches the T-Rex template image as base64
+ */
+const fetchTemplateImage = async (): Promise<{ data: string; mimeType: string } | null> => {
+  // Return cached if available
+  if (templateImageCache) {
+    return templateImageCache;
+  }
+  
+  try {
+    const response = await fetch(TREX_TEMPLATE_URL);
+    if (!response.ok) {
+      console.warn('Failed to fetch T-Rex template:', response.status);
+      return null;
+    }
+    
+    const blob = await response.blob();
+    const mimeType = blob.type || 'image/jpeg';
+    
+    // Convert to base64
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        // Remove data URL prefix to get pure base64
+        const base64Data = result.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    
+    templateImageCache = { data: base64, mimeType };
+    console.log('🦖 T-Rex template loaded and cached');
+    return templateImageCache;
+    
+  } catch (error) {
+    console.error('Failed to fetch T-Rex template:', error);
+    return null;
+  }
+};
 
 /**
  * Converts hue (0-360) to a descriptive color name for prompts
@@ -462,72 +508,157 @@ const hueToColorName = (hue: number): string => {
 };
 
 /**
- * Generates a detailed prompt for Pyra portrait based on game state
+ * Converts hue to a hex color for more precise color matching
  */
-const generatePortraitPrompt = (state: GameState): string => {
+const hueToHex = (hue: number, saturation: number, lightness: number): string => {
+  const h = hue / 360;
+  const s = saturation / 100;
+  const l = lightness / 100;
+  
+  const hue2rgb = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const r = Math.round(hue2rgb(p, q, h + 1/3) * 255);
+  const g = Math.round(hue2rgb(p, q, h) * 255);
+  const b = Math.round(hue2rgb(p, q, h - 1/3) * 255);
+  
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+};
+
+/**
+ * Generates a detailed prompt for Pyra portrait based on game state
+ * Now designed to work WITH a reference image
+ */
+const generatePortraitPrompt = (state: GameState, hasReferenceImage: boolean): string => {
   const { seed, stage, name, learnedBehavior } = state;
   const { appearance } = seed;
   const traits = learnedBehavior.aggregates.dominantTraits;
   
-  // Color descriptions
+  // Color descriptions - more detailed for image editing
   const bodyColor = hueToColorName(appearance.baseHue);
+  const bodyHex = hueToHex(appearance.baseHue, appearance.saturation, appearance.lightness);
   const eyeColor = hueToColorName((appearance.baseHue + 180) % 360);
+  const eyeHex = hueToHex((appearance.baseHue + 180) % 360, 90, 60);
   
   // Saturation/lightness descriptors
-  const satDesc = appearance.saturation > 70 ? 'vibrant' : 
-                  appearance.saturation > 40 ? 'soft' : 'muted';
-  const lightDesc = appearance.lightness > 60 ? 'bright' : 
-                    appearance.lightness > 40 ? 'medium' : 'dark';
+  const satDesc = appearance.saturation > 70 ? 'vibrant saturated' : 
+                  appearance.saturation > 40 ? 'soft' : 'muted pastel';
+  const lightDesc = appearance.lightness > 60 ? 'bright light' : 
+                    appearance.lightness > 40 ? 'medium toned' : 'dark deep';
   
   // Personality-based expression
-  let expression = 'friendly and curious';
-  if (traits.includes('fearful') || traits.includes('anxious')) {
-    expression = 'shy and timid, with big worried eyes';
+  let expression = 'friendly and curious expression, soft happy eyes';
+  let mood = 'happy and playful';
+  if (traits.includes('fearful')) {
+    expression = 'shy timid expression, big worried innocent eyes, slightly nervous';
+    mood = 'gentle and shy';
   } else if (traits.includes('hyperactive')) {
-    expression = 'excited and energetic, with a playful grin';
+    expression = 'excited energetic expression, wide sparkling eyes, big playful grin';
+    mood = 'bouncy and excited';
   } else if (traits.includes('trusting')) {
-    expression = 'warm and trusting, with soft kind eyes';
-  } else if (traits.includes('rebellious') || traits.includes('defiant')) {
-    expression = 'confident and mischievous, with a sly smirk';
-  } else if (traits.includes('calm') || traits.includes('patient')) {
-    expression = 'serene and gentle, with a peaceful gaze';
+    expression = 'warm loving expression, soft adoring eyes, gentle smile';
+    mood = 'loving and warm';
+  } else if (traits.includes('rebellious')) {
+    expression = 'confident mischievous expression, sly smirk, bold stance';
+    mood = 'confident and cheeky';
+  } else if (traits.includes('calm')) {
+    expression = 'serene peaceful expression, gentle calm eyes, relaxed';
+    mood = 'calm and peaceful';
   } else if (traits.includes('clingy')) {
-    expression = 'loving and affectionate, with adoring eyes';
+    expression = 'affectionate adoring expression, loving puppy-dog eyes';
+    mood = 'loving and attached';
   }
   
-  // Stage-based age descriptor
-  const ageDesc: Record<Stage, string> = {
-    [Stage.EGG]: 'baby',
-    [Stage.HATCHLING]: 'tiny newborn baby',
-    [Stage.PUPPY]: 'small young',
-    [Stage.JUVENILE]: 'young curious',
-    [Stage.ADOLESCENT]: 'teenage',
-    [Stage.ADULT]: 'majestic adult',
+  // Stage-based context
+  const stageContext: Record<Stage, { age: string; background: string; extras: string }> = {
+    [Stage.EGG]: { 
+      age: 'baby', 
+      background: 'soft warm nest with glowing light',
+      extras: 'tiny and cute'
+    },
+    [Stage.HATCHLING]: { 
+      age: 'tiny newborn baby', 
+      background: 'cozy nest with soft morning light, flowers nearby',
+      extras: 'very small and adorable, wobbly'
+    },
+    [Stage.PUPPY]: { 
+      age: 'small young baby', 
+      background: 'sunny meadow with butterflies, soft grass',
+      extras: 'small and cute, playful pose'
+    },
+    [Stage.JUVENILE]: { 
+      age: 'young child', 
+      background: 'magical forest clearing with sunbeams, mushrooms',
+      extras: 'curious exploring pose'
+    },
+    [Stage.ADOLESCENT]: { 
+      age: 'teenage', 
+      background: 'dramatic sunset landscape, mountains in distance',
+      extras: 'confident proud stance'
+    },
+    [Stage.ADULT]: { 
+      age: 'majestic adult', 
+      background: 'epic fantasy landscape with aurora sky, magical sparkles',
+      extras: 'powerful majestic pose, impressive'
+    },
   };
   
-  // Scale pattern
-  const patternDesc = appearance.scalePattern === 'spotted' ? 'with darker spots' :
-                      appearance.scalePattern === 'striped' ? 'with subtle stripes' :
-                      'with smooth scales';
-  
-  // Size descriptor
-  const sizeDesc = appearance.size === 'runt' ? 'small and petite' :
-                   appearance.size === 'large' ? 'big and sturdy' : '';
-  
-  // Build the prompt
+  const ctx = stageContext[stage];
   const creatureName = name || 'Pyra';
   
-  return `A cute ${ageDesc[stage]} T-Rex dinosaur named ${creatureName}, ` +
-         `${satDesc} ${lightDesc} ${bodyColor} colored skin ${patternDesc}, ` +
-         `${sizeDesc ? sizeDesc + ', ' : ''}` +
-         `beautiful glowing ${eyeColor} eyes, ` +
-         `${expression}, ` +
-         `portrait style centered composition, ` +
-         `soft magical lighting with subtle sparkles, ` +
-         `fantasy children's book illustration style, ` +
-         `warm and friendly atmosphere, ` +
-         `high quality digital art, ` +
-         `no text, no watermarks`;
+  // Scale pattern description
+  const patternDesc = appearance.scalePattern === 'spotted' ? 'with darker spotted pattern on skin' :
+                      appearance.scalePattern === 'striped' ? 'with subtle stripe markings' :
+                      'with smooth clean scales';
+  
+  if (hasReferenceImage) {
+    // PROMPT FOR IMAGE-TO-IMAGE (with reference)
+    return `Transform this T-Rex character portrait:
+
+COLOR CHANGES (very important):
+- Change the entire body/skin color to ${satDesc} ${lightDesc} ${bodyColor} (approximately ${bodyHex})
+- Make the eyes glow ${eyeColor} color (approximately ${eyeHex}) with magical luminous glow
+- Add ${patternDesc}
+
+CHARACTER:
+- This is ${creatureName}, a ${ctx.age} T-Rex dinosaur
+- Give them a ${expression}
+- The mood should be ${mood}
+- ${ctx.extras}
+
+BACKGROUND:
+- Replace background with: ${ctx.background}
+- Add magical sparkles and soft lighting
+- Children's book illustration style, warm and inviting
+
+STYLE:
+- Keep the same cute T-Rex character design and pose
+- High quality digital art, fantasy illustration
+- Soft beautiful lighting, vibrant colors
+- No text, no watermarks
+- Portrait composition, centered`;
+  } else {
+    // FALLBACK PROMPT (text-only, no reference image)
+    return `A cute ${ctx.age} T-Rex dinosaur named ${creatureName}, ` +
+           `${satDesc} ${lightDesc} ${bodyColor} colored skin ${patternDesc}, ` +
+           `beautiful glowing ${eyeColor} eyes, ` +
+           `${expression}, ${mood} mood, ` +
+           `${ctx.extras}, ` +
+           `background: ${ctx.background}, ` +
+           `portrait style centered composition, ` +
+           `soft magical lighting with sparkles, ` +
+           `fantasy children's book illustration style, ` +
+           `high quality digital art, ` +
+           `no text, no watermarks`;
+  }
 };
 
 /**
@@ -597,7 +728,8 @@ export const hasImageGenerationCapability = async (): Promise<boolean> => {
 
 /**
  * Generates a unique Pyra portrait using Nano Banana (Gemini 2.5 Flash Image)
- * Returns base64 image data or null if generation fails
+ * Uses reference image for consistent T-Rex model with custom colors
+ * Returns base64 image data URL or null if generation fails
  */
 export const generatePyraPortrait = async (state: GameState): Promise<string | null> => {
   // Check cache first
@@ -623,16 +755,33 @@ export const generatePyraPortrait = async (state: GameState): Promise<string | n
   }
   
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const prompt = generatePortraitPrompt(state);
+    // Fetch template image
+    const templateImage = await fetchTemplateImage();
+    const hasReference = !!templateImage;
     
-    console.log('🎨 Generating portrait with prompt:', prompt.substring(0, 100) + '...');
+    const ai = new GoogleGenAI({ apiKey });
+    const prompt = generatePortraitPrompt(state, hasReference);
+    
+    console.log('🎨 Generating portrait with reference image:', hasReference);
+    console.log('📝 Prompt:', prompt.substring(0, 150) + '...');
+    
+    // Build content parts
+    const parts: any[] = [{ text: prompt }];
+    
+    // Add reference image if available
+    if (templateImage) {
+      parts.push({
+        inlineData: {
+          mimeType: templateImage.mimeType,
+          data: templateImage.data,
+        }
+      });
+    }
     
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: prompt,
+      contents: { parts },
       config: {
-        // FIXED: responseModalities required for image output
         responseModalities: ['image', 'text'],
       }
     });
@@ -644,13 +793,13 @@ export const generatePyraPortrait = async (state: GameState): Promise<string | n
       return null;
     }
     
-    const parts = candidates[0].content?.parts;
-    if (!parts) {
+    const responseParts = candidates[0].content?.parts;
+    if (!responseParts) {
       console.warn('No parts in portrait response');
       return null;
     }
     
-    for (const part of parts) {
+    for (const part of responseParts) {
       if (part.inlineData?.data) {
         const imageData = part.inlineData.data;
         const mimeType = part.inlineData.mimeType || 'image/png';
@@ -659,8 +808,15 @@ export const generatePyraPortrait = async (state: GameState): Promise<string | n
         // Cache for future use
         cachePortrait(state.seed.id, state.stage, dataUrl);
         
-        console.log('🖼️ Portrait generated successfully');
+        console.log('🖼️ Portrait generated successfully (with reference:', hasReference, ')');
         return dataUrl;
+      }
+    }
+    
+    // Check if there's a text response explaining why image wasn't generated
+    for (const part of responseParts) {
+      if (part.text) {
+        console.warn('Nano Banana text response (no image):', part.text);
       }
     }
     
@@ -673,8 +829,9 @@ export const generatePyraPortrait = async (state: GameState): Promise<string | n
     // Don't show error UI for expected failures
     if (error.message?.includes('not found') || 
         error.message?.includes('not supported') ||
+        error.message?.includes('SAFETY') ||
         error.status === 400) {
-      console.warn('Image generation not available for this API key/region');
+      console.warn('Image generation not available or blocked:', error.message);
     }
     
     return null;
@@ -692,7 +849,15 @@ export const clearPortraitCache = (): void => {
         localStorage.removeItem(key);
       }
     }
+    console.log('🗑️ Portrait cache cleared');
   } catch (e) {
     console.warn('Failed to clear portrait cache:', e);
   }
+};
+
+/**
+ * Preloads the T-Rex template image (call on app init)
+ */
+export const preloadTemplateImage = async (): Promise<void> => {
+  await fetchTemplateImage();
 };
