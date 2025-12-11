@@ -4,6 +4,7 @@ import Scene from './components/Scene';
 import UI from './components/UI';
 import LoadingScreen from './components/LoadingScreen';
 import TutorialModal from './components/TutorialModal'; // FIXED: Import tutorial modal
+import CelebrationModal from './components/CelebrationModal'; // NEW
 import { audioService } from './services/audioService';
 import { Stage } from './types';
 
@@ -102,7 +103,13 @@ function App() {
       {/* UI Layer */}
       <UI game={game} />
 
-      {/* FIXED: Tutorial Modal - shown after first hatch */}
+      {/* NEW: Celebration Modal - shows for milestones */}
+      <CelebrationModal
+        celebration={game.state.activeCelebration}
+        onDismiss={game.dismissCelebration}
+      />
+
+      {/* Tutorial Modal - shown after first hatch */}
       <TutorialModal
         isOpen={showTutorial}
         onClose={handleCloseTutorial}

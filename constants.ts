@@ -671,3 +671,99 @@ export const WORLD_SCROLL_CONFIG = {
   /** Cloud parallax multiplier (0.1 = clouds move 10% of scroll distance) */
   CLOUD_PARALLAX_FACTOR: 0.15,
 } as const;
+
+// =============================================
+// CELEBRATION SYSTEM CONFIGURATION
+// =============================================
+
+export const CELEBRATION_CONFIG = {
+  TRUST_MILESTONES: [25, 50, 75, 90] as const,
+  STREAK_MILESTONES: [3, 7, 14, 30, 60, 100] as const,
+  COMMAND_MASTERY_THRESHOLD: 80,
+  STREAK_WINDOW_HOURS: 28, // Hours to count as "next day" return
+  STREAK_BREAK_HOURS: 48,  // Hours before streak resets
+} as const;
+
+export const EVOLUTION_CELEBRATIONS: Record<Stage, {
+  title: string;
+  subtitle: string;
+  emoji: string;
+  unlocks: string[];
+}> = {
+  [Stage.EGG]: {
+    title: "A New Beginning",
+    subtitle: "Your egg is waiting...",
+    emoji: "🥚",
+    unlocks: [],
+  },
+  [Stage.HATCHLING]: {
+    title: "It's Alive!",
+    subtitle: "Your baby dinosaur has hatched!",
+    emoji: "🐣",
+    unlocks: ["Pyra can see you!", "Pyra responds to your voice"],
+  },
+  [Stage.PUPPY]: {
+    title: "First Words!",
+    subtitle: "Pyra is learning to understand you!",
+    emoji: "🗣️",
+    unlocks: ["Pyra knows simple words!", "Try teaching commands!", "Pyra can say your name!"],
+  },
+  [Stage.JUVENILE]: {
+    title: "Growing Up!",
+    subtitle: "Pyra is becoming curious about everything!",
+    emoji: "🦕",
+    unlocks: ["Pyra asks 'why?' now!", "Longer conversations!", "Pyra remembers more!"],
+  },
+  [Stage.ADOLESCENT]: {
+    title: "Teenager Phase!",
+    subtitle: "Pyra has their own opinions now...",
+    emoji: "🦖",
+    unlocks: ["Pyra might disagree!", "Deeper conversations", "Strong personality forming"],
+  },
+  [Stage.ADULT]: {
+    title: "All Grown Up!",
+    subtitle: "Your journey together has shaped who Pyra became.",
+    emoji: "👑",
+    unlocks: ["Full vocabulary!", "Wise companion", "Your bond is complete"],
+  },
+};
+
+export const TRUST_MILESTONE_MESSAGES: Record<number, {
+  title: string;
+  subtitle: string;
+  emoji: string;
+}> = {
+  25: {
+    title: "Building Trust",
+    subtitle: "Pyra is starting to feel safe with you!",
+    emoji: "🌱",
+  },
+  50: {
+    title: "Real Friends",
+    subtitle: "Pyra trusts you now!",
+    emoji: "🤝",
+  },
+  75: {
+    title: "Best Friends",
+    subtitle: "Pyra loves spending time with you!",
+    emoji: "💕",
+  },
+  90: {
+    title: "Unbreakable Bond",
+    subtitle: "Pyra trusts you completely!",
+    emoji: "💖",
+  },
+};
+
+export const STREAK_MESSAGES: Record<number, {
+  title: string;
+  subtitle: string;
+  emoji: string;
+}> = {
+  3: { title: "3 Days Together!", subtitle: "You're building a habit!", emoji: "⭐" },
+  7: { title: "One Week!", subtitle: "Pyra counts on you now!", emoji: "🌟" },
+  14: { title: "Two Weeks!", subtitle: "You're a dedicated caretaker!", emoji: "✨" },
+  30: { title: "One Month!", subtitle: "Pyra is so lucky to have you!", emoji: "🏆" },
+  60: { title: "Two Months!", subtitle: "Your bond is legendary!", emoji: "👑" },
+  100: { title: "100 Days!", subtitle: "A friendship for the ages!", emoji: "💎" },
+};

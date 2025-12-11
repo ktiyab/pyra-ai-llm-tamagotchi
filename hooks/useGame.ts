@@ -4,6 +4,7 @@ import {
   PointNotification, PointType, RewardHistoryEntry, ObedienceRecord,
   PersonalityDimension, LearnedBehavior, SignificantMemory, VocabularySentiment,
   VocabularySource, PreferenceEntry, InteractionPatternEntry, MemoryCategory,
+  CelebrationData, CelebrationTracking, StreakData,
 } from '../types';
 import { generateSeed } from '../utils';
 import {
@@ -12,7 +13,8 @@ import {
   ENERGY_CONFIG, EMOTION_DECAY_MODIFIERS, REWARD_HISTORY_CONFIG,
   OBEDIENCE_HISTORY_CONFIG, STAGE_DELTA_MULTIPLIERS, INITIAL_LEARNED_BEHAVIOR,
   PERSONALITY_CONFIG, MEMORY_CONFIG, KNOWLEDGE_CONFIG, INTERACTION_PATTERN_CONFIG,
-  PERSISTENCE_CONFIG,
+  PERSISTENCE_CONFIG, CELEBRATION_CONFIG, EVOLUTION_CELEBRATIONS, TRUST_MILESTONE_MESSAGES,
+  STREAK_MESSAGES,
 } from '../constants';
 import { generateCatResponse, AudioInput } from '../services/geminiService';
 import { audioService } from '../services/audioService';
@@ -287,7 +289,21 @@ const initialState: GameState = {
   learnedBehavior: { ...INITIAL_LEARNED_BEHAVIOR },
   interactionPatterns: [],
   // FIXED: Added tutorial tracking - defaults to false (not seen)
-  tutorialSeen: false,  
+  tutorialSeen: false,
+  // NEW: Celebration system
+  activeCelebration: null,
+  celebrationHistory: {
+    evolutions: [],
+    trustMilestones: [],
+    commandMasteries: [],
+    streakMilestones: [],
+    careGrades: [],
+  },
+  streak: {
+    current: 0,
+    longest: 0,
+    lastCheckIn: Date.now(),
+  },    
 };
 
 // =============================================
@@ -550,6 +566,85 @@ const BEHAVIOR_RESULT_ACTIONS = new Set([
   'ADD_MESSAGE'
 ]);
 
+
+// =============================================
+// CELEBRATION HELPERS
+// =============================================
+
+const createEvolutionCelebration = (stage: Stage): CelebrationData => {
+  const config = EVOLUTION_CELEBRATIONS[stage];
+  return {
+    id: `evolution_${stage}_${Date.now()}`,
+    type: stage === Stage.PUPPY ? 'first_word' : 'evolution',
+    title: config.title,
+    subtitle: config.subtitle,
+    emoji: config.emoji,
+    stage,
+    unlocks: config.unlocks,
+  };
+};
+
+const createTrustMilestoneCelebration = (milestone: number): CelebrationData => {
+  const config = TRUST_MILESTONE_MESSAGES[milestone];
+  return {
+    id: `trust_${milestone}_${Date.now()}`,
+    type: 'trust_milestone',
+    title: config.title,
+    subtitle: config.subtitle,
+    emoji: config.emoji,
+    value: milestone,
+  };
+};
+
+const createCommandMasteryCelebration = (command: string): CelebrationData => {
+  return {
+    id: `mastery_${command}_${Date.now()}`,
+    type: 'command_mastery',
+    title: "Command Mastered!",
+    subtitle: `Pyra now knows "${command}" perfectly!`,
+    emoji: "🎓",
+    value: 100,
+    unlocks: [`"${command}" works every time!`],
+  };
+};
+
+const createStreakCelebration = (days: number): CelebrationData => {
+  const config = STREAK_MESSAGES[days];
+  return {
+    id: `streak_${days}_${Date.now()}`,
+    type: 'streak_milestone',
+    title: config.title,
+    subtitle: config.subtitle,
+    emoji: config.emoji,
+    value: days,
+  };
+};
+
+const checkTrustMilestone = (
+  prevTrust: number, 
+  newTrust: number, 
+  celebrated: number[]
+): number | null => {
+  for (const milestone of CELEBRATION_CONFIG.TRUST_MILESTONES) {
+    if (prevTrust < milestone && newTrust >= milestone && !celebrated.includes(milestone)) {
+      return milestone;
+    }
+  }
+  return null;
+};
+
+const checkStreakMilestone = (
+  streak: number,
+  celebrated: number[]
+): number | null => {
+  for (const milestone of CELEBRATION_CONFIG.STREAK_MILESTONES) {
+    if (streak >= milestone && !celebrated.includes(milestone)) {
+      return milestone;
+    }
+  }
+  return null;
+};
+
 // =============================================
 // GAME REDUCER
 // =============================================
@@ -669,43 +764,34 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (type === 'clean') newNeeds.cleanliness = Math.min(100, newNeeds.cleanliness + value);
       if (type === 'pet') newNeeds.attention = Math.min(100, newNeeds.attention + value);
 
-      // FIXED: Calculate trust with personality modifier
       const trustCalc = calculateTrustReward(
         type, state.needs, state.stage, state.learnedBehavior.personality
       );
       const newTrust = Math.min(100, Math.max(0, state.bond.trust + trustCalc.finalReward));
 
-       // Calculate emotional impact boosts
       const attentionBoost = type === 'pet' ? value * 0.3 : 0;
       const playBoost = type === 'play' ? value * 0.3 : 0;
 
       const notifications = [...state.pointNotifications];
       
-      // Trust notification
       if (trustCalc.finalReward !== 0 && shouldShowNotification(notifications, 'trust', 800)) {
         notifications.push(createPointNotification('trust', trustCalc.finalReward, trustCalc.reason));
       }
       
-      // FIXED: Add love notification for petting
       if (attentionBoost > 0 && shouldShowNotification(notifications, 'love', 800)) {
         notifications.push(createPointNotification('love', attentionBoost, 'Showed affection'));
       }
       
-      // FIXED: Add energy notification for playing
       if (playBoost > 0 && shouldShowNotification(notifications, 'energy', 800)) {
         notifications.push(createPointNotification('energy', playBoost, 'Had fun!'));
       }
 
-      // Reward history
-      const loveDelta = type === 'pet' ? value * 0.3 : 0;
-      const energyDelta = type === 'play' ? value * 0.3 : 0;
       const interactionEntry = createRewardEntry(
         trustCalc.finalReward, attentionBoost, playBoost, 0, 'interaction', trustCalc.reason
       );
       const updatedRewardHistory = [...state.rewardHistory, interactionEntry]
         .slice(-REWARD_HISTORY_CONFIG.MAX_ENTRIES);
 
-      // FIXED: Track interaction pattern for preference detection
       const patternEntry: InteractionPatternEntry = {
         type,
         timeOfDay: state.timeOfDay,
@@ -716,6 +802,27 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const newPatterns = [...state.interactionPatterns, patternEntry]
         .slice(-INTERACTION_PATTERN_CONFIG.MAX_ENTRIES);
 
+      // NEW: Check for trust milestone celebration
+      let activeCelebration = state.activeCelebration;
+      let celebrationHistory = { ...state.celebrationHistory };
+      
+      // Only check if no celebration is currently active
+      if (!activeCelebration) {
+        const trustMilestone = checkTrustMilestone(
+          state.bond.trust, 
+          newTrust, 
+          celebrationHistory.trustMilestones
+        );
+        
+        if (trustMilestone) {
+          activeCelebration = createTrustMilestoneCelebration(trustMilestone);
+          celebrationHistory = {
+            ...celebrationHistory,
+            trustMilestones: [...celebrationHistory.trustMilestones, trustMilestone],
+          };
+        }
+      }
+
       return {
         ...state,
         needs: newNeeds,
@@ -725,6 +832,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         pointNotifications: notifications,
         rewardHistory: updatedRewardHistory,
         interactionPatterns: newPatterns,
+        activeCelebration,
+        celebrationHistory,
       };
     }
 
@@ -735,6 +844,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       let rewardHistory = [...state.rewardHistory];
       let obedienceHistory = [...state.obedienceHistory];
       let learnedBehavior = { ...state.learnedBehavior };
+      let activeCelebration = state.activeCelebration;
+      let celebrationHistory = { ...state.celebrationHistory };
 
       let newTrust = state.bond.trust;
       let newAttention = state.needs.attention;
@@ -743,13 +854,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       let trustDelta = 0, loveDelta = 0, energyDelta = 0, respectDelta = 0;
       let rewardReason = 'Conversation';
+      const prevTrust = state.bond.trust; // NEW: Track for milestone check
 
       // Process stats_delta with personality modifiers
       if (response.stats_delta) {
         const trustMult = TRUST_CONFIG.STAGE_MULTIPLIERS[state.stage] ?? 1.0;
         const stageDeltaMult = STAGE_DELTA_MULTIPLIERS[state.stage] ?? { love: 1.0, energy: 1.0 };
 
-        // Trust disposition modifier for conversation trust changes
         const trustDispMod = 1 + (learnedBehavior.personality.trustDisposition * 0.003);
         const clampedTrustMod = Math.max(0.5, Math.min(1.5, trustDispMod));
 
@@ -782,18 +893,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         const { command_detected, result, reason } = response.obedience;
         const respectMult = RESPECT_CONFIG.STAGE_MULTIPLIERS[state.stage] ?? 1.0;
 
-        // FIXED: Rebellious creatures get BONUS respect when they DO obey
-        // (rare compliance is more meaningful), eager creatures get normal respect
         const obedienceValue = learnedBehavior.personality.obedience;
         let obeyMod = 1.0;
 
         if (result === 'obeyed' || result === 'partial') {
-          // Rebellious (-100) obeying = 1.5x respect (rare and meaningful)
-          // Eager (+100) obeying = 1.0x respect (expected behavior)
           obeyMod = 1 + (Math.max(0, -obedienceValue) * 0.005);
         } else if (result === 'refused') {
-          // Rebellious (-100) refusing = 1.0x penalty (expected)
-          // Eager (+100) refusing = 1.5x penalty (disappointing)
           obeyMod = 1 + (Math.max(0, obedienceValue) * 0.005);
         }
 
@@ -812,15 +917,29 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           notifications.push(createPointNotification('respect', Math.round(respectDelta * 100) / 100, rewardReason));
         }
 
-        // Add to obedience history
         const obedienceRecord: ObedienceRecord = { command: command_detected, result, timestamp: Date.now() };
         obedienceHistory = [...obedienceHistory, obedienceRecord].slice(-OBEDIENCE_HISTORY_CONFIG.MAX_ENTRIES);
 
-        // Update command proficiency
         const praised = trustDelta > 2;
         const updatedProf = behaviorService.updateCommandProficiency(
           command_detected, result, praised, learnedBehavior.knowledge.commands
         );
+        
+        // NEW: Check for command mastery celebration
+        const prevProf = learnedBehavior.knowledge.commands[command_detected]?.proficiency ?? 0;
+        const newProf = updatedProf.proficiency;
+        
+        if (prevProf < CELEBRATION_CONFIG.COMMAND_MASTERY_THRESHOLD && 
+            newProf >= CELEBRATION_CONFIG.COMMAND_MASTERY_THRESHOLD &&
+            !celebrationHistory.commandMasteries.includes(command_detected) &&
+            !activeCelebration) {
+          activeCelebration = createCommandMasteryCelebration(command_detected);
+          celebrationHistory = {
+            ...celebrationHistory,
+            commandMasteries: [...celebrationHistory.commandMasteries, command_detected],
+          };
+        }
+        
         learnedBehavior = {
           ...learnedBehavior,
           knowledge: {
@@ -868,7 +987,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
-      // FIXED: Process memory_reference - increment timesReferenced counter
+      // Process memory_reference
       if (response.memory_reference) {
         const searchTerm = response.memory_reference.toLowerCase().substring(0, 20);
         const memoryIdx = learnedBehavior.memories.findIndex(
@@ -876,7 +995,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         );
         
         if (memoryIdx >= 0) {
-          // Create updated memories array with incremented reference count
           const updatedMemories = [...learnedBehavior.memories];
           updatedMemories[memoryIdx] = {
             ...updatedMemories[memoryIdx],
@@ -887,9 +1005,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
             ...learnedBehavior,
             memories: updatedMemories
           };
-          
-          // Optional: Log for debugging
-          console.log(`Memory referenced: "${updatedMemories[memoryIdx].narrative}" (refs: ${updatedMemories[memoryIdx].timesReferenced})`);
         }
       }
 
@@ -897,6 +1012,23 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (trustDelta !== 0 || loveDelta !== 0 || energyDelta !== 0 || respectDelta !== 0) {
         const entry = createRewardEntry(trustDelta, loveDelta, energyDelta, respectDelta, response.obedience ? 'obedience' : 'llm', rewardReason);
         rewardHistory = [...rewardHistory, entry].slice(-REWARD_HISTORY_CONFIG.MAX_ENTRIES);
+      }
+
+      // NEW: Check for trust milestone (from conversation)
+      if (!activeCelebration) {
+        const trustMilestone = checkTrustMilestone(
+          prevTrust, 
+          newTrust, 
+          celebrationHistory.trustMilestones
+        );
+        
+        if (trustMilestone) {
+          activeCelebration = createTrustMilestoneCelebration(trustMilestone);
+          celebrationHistory = {
+            ...celebrationHistory,
+            trustMilestones: [...celebrationHistory.trustMilestones, trustMilestone],
+          };
+        }
       }
 
       return {
@@ -909,6 +1041,64 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         rewardHistory,
         obedienceHistory,
         learnedBehavior,
+        activeCelebration,
+        celebrationHistory,
+      };
+    }
+
+    // ==================== CELEBRATION ACTIONS ====================
+    case 'TRIGGER_CELEBRATION': {
+      return {
+        ...state,
+        activeCelebration: action.payload,
+      };
+    }
+
+    case 'DISMISS_CELEBRATION': {
+      return {
+        ...state,
+        activeCelebration: null,
+      };
+    }
+
+    case 'UPDATE_STREAK': {
+      const now = Date.now();
+      const hoursSinceCheckIn = (now - state.streak.lastCheckIn) / (1000 * 60 * 60);
+      
+      let newStreak = state.streak.current;
+      let activeCelebration = state.activeCelebration;
+      let celebrationHistory = { ...state.celebrationHistory };
+      
+      if (hoursSinceCheckIn >= CELEBRATION_CONFIG.STREAK_BREAK_HOURS) {
+        // Streak broken
+        newStreak = 1;
+      } else if (hoursSinceCheckIn >= 20) {
+        // Valid next-day return (20-48 hours)
+        newStreak = state.streak.current + 1;
+        
+        // Check for streak milestone
+        if (!activeCelebration) {
+          const streakMilestone = checkStreakMilestone(newStreak, celebrationHistory.streakMilestones);
+          if (streakMilestone) {
+            activeCelebration = createStreakCelebration(streakMilestone);
+            celebrationHistory = {
+              ...celebrationHistory,
+              streakMilestones: [...celebrationHistory.streakMilestones, streakMilestone],
+            };
+          }
+        }
+      }
+      // If < 20 hours, same day - don't increment
+      
+      return {
+        ...state,
+        streak: {
+          current: newStreak,
+          longest: Math.max(state.streak.longest, newStreak),
+          lastCheckIn: now,
+        },
+        activeCelebration,
+        celebrationHistory,
       };
     }
 
@@ -947,6 +1137,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
+      // NEW: Create celebration if not already shown
+      let activeCelebration = state.activeCelebration;
+      let celebrationHistory = { ...state.celebrationHistory };
+      
+      if (!celebrationHistory.evolutions.includes(newStage)) {
+        activeCelebration = createEvolutionCelebration(newStage);
+        celebrationHistory = {
+          ...celebrationHistory,
+          evolutions: [...celebrationHistory.evolutions, newStage],
+        };
+      }
+
       return {
         ...state,
         stage: newStage,
@@ -955,6 +1157,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         bond: { ...state.bond, trust: Math.min(100, state.bond.trust + milestoneBonus) },
         pointNotifications: notifications,
         learnedBehavior,
+        activeCelebration,
+        celebrationHistory,
       };
     }
 
@@ -1421,6 +1625,19 @@ export const useGame = () => {
     return () => clearInterval(interval);
   }, [dispatch]);
 
+  // NEW: Streak update on mount
+  useEffect(() => {
+    // Only update streak if not an egg
+    if (state.stage !== Stage.EGG) {
+      dispatch({ type: 'UPDATE_STREAK' });
+    }
+  }, []); // Only on mount
+
+  // NEW: Dismiss celebration callback
+  const dismissCelebration = useCallback(() => {
+    dispatch({ type: 'DISMISS_CELEBRATION' });
+  }, [dispatch]);
+
   // Evolution check
   useEffect(() => {
     const threshold = EVOLUTION_THRESHOLDS[state.stage];
@@ -1561,5 +1778,5 @@ export const useGame = () => {
     baseDispatch({ type: 'RESET', payload: generateSeed() });
   }, []);
 
-  return { state, dispatch, interact, sendMessage, sendAudioMessage, startRecording, stopRecording, resetGame, setTimeOfDay, isProcessing, isRecording };
+  return { state, dispatch, interact, sendMessage, sendAudioMessage, startRecording, stopRecording, resetGame, setTimeOfDay, isProcessing, isRecording, dismissCelebration };
 };

@@ -397,6 +397,11 @@ export interface GameState {
   
   // FIXED: Added tutorial tracking
   tutorialSeen: boolean;
+
+  // NEW: Celebration system
+  activeCelebration: CelebrationData | null;
+  celebrationHistory: CelebrationTracking;
+  streak: StreakData;  
 }
 
 // =============================================
@@ -415,6 +420,7 @@ export interface GameContextType {
   isRecording: boolean;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
+  dismissCelebration: () => void; // NEW
 }
 
 // =============================================
@@ -471,4 +477,44 @@ export type GameAction =
   | { type: 'PRUNE_MEMORIES' }
   | { type: 'MARK_MILESTONE_TRIGGERED'; payload: string }
   // FIXED: Added tutorial action
-  | { type: 'MARK_TUTORIAL_SEEN' };
+  | { type: 'MARK_TUTORIAL_SEEN' }
+  // NEW: Celebration actions
+  | { type: 'TRIGGER_CELEBRATION'; payload: CelebrationData }
+  | { type: 'DISMISS_CELEBRATION' }
+  | { type: 'UPDATE_STREAK' };
+// =============================================
+// CELEBRATION SYSTEM
+// =============================================
+
+export type CelebrationType = 
+  | 'evolution' 
+  | 'first_word' 
+  | 'command_mastery' 
+  | 'trust_milestone' 
+  | 'streak_milestone'
+  | 'care_grade_up';
+
+export interface CelebrationData {
+  id: string;
+  type: CelebrationType;
+  title: string;
+  subtitle: string;
+  emoji: string;
+  stage?: Stage;
+  unlocks?: string[];
+  value?: number;
+}
+
+export interface StreakData {
+  current: number;
+  longest: number;
+  lastCheckIn: number;
+}
+
+export interface CelebrationTracking {
+  evolutions: Stage[];
+  trustMilestones: number[];
+  commandMasteries: string[];
+  streakMilestones: number[];
+  careGrades: CareGrade[];
+}
