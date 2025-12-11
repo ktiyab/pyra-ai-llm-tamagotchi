@@ -337,6 +337,5 @@ Under the following terms:
 *Now go say hello to your new friend.*
 
 </div>
-```
 
 ---
