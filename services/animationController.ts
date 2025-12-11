@@ -308,7 +308,7 @@ export class TRexAnimationController {
         // FIXED: Signal atomic reset for mesh/camera snap
         this.justScrolled = true;
         
-        console.log("🦖 Scroll FORWARD - offset now:", this.worldOffset.z);
+        // console.log("🦖 Scroll FORWARD - offset now:", this.worldOffset.z);
         this.onScrollCallback?.('forward', this.worldOffset.clone());
       } 
       else if (this.worldPosition.z < BACKWARD_THRESHOLD) {
@@ -319,7 +319,7 @@ export class TRexAnimationController {
         // FIXED: Signal atomic reset for mesh/camera snap
         this.justScrolled = true;
         
-        console.log("🦖 Scroll BACKWARD - offset now:", this.worldOffset.z);
+        // console.log("🦖 Scroll BACKWARD - offset now:", this.worldOffset.z);
         this.onScrollCallback?.('backward', this.worldOffset.clone());
       }
       

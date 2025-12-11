@@ -4,7 +4,7 @@ import {
   PointNotification, PointType, RewardHistoryEntry, ObedienceRecord,
   PersonalityDimension, LearnedBehavior, SignificantMemory, VocabularySentiment,
   VocabularySource, PreferenceEntry, InteractionPatternEntry, MemoryCategory,
-  CelebrationData, CelebrationTracking, StreakData, ChatMessage,
+  CelebrationData, CelebrationTracking, StreakData, ChatMessage, Bond, LearnedPersonality,
 } from '../types';
 import { generateSeed } from '../utils';
 import {
@@ -306,10 +306,7 @@ const initialState: GameState = {
     lastCheckIn: Date.now(),
   },
   // FIXED: Add lastSurpriseTime
-  lastSurpriseTime: 0,
-  // FIXED: Add to initialState
-  cachedPortrait: null,
-  cachedPortraitStage: null,  
+  lastSurpriseTime: 0, 
 };
 
 // =============================================

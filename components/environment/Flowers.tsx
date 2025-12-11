@@ -87,7 +87,7 @@ const Flowers: React.FC<FlowersProps> = ({ creaturePosition, creatureScale, scro
       });
     }
     
-    console.log("🌸 Flowers regenerated - seed:", scrollSeed, "zone:", Math.floor(worldOffset.z / 10));
+    // console.log("🌸 Flowers regenerated - seed:", scrollSeed, "zone:", Math.floor(worldOffset.z / 10));
     return result;
   }, [scrollSeed, worldOffset.z]); // FIXED: Added worldOffset.z dependency
   

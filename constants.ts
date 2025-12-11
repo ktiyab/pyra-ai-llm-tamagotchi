@@ -796,7 +796,7 @@ export interface DailySurprise {
   message: string;
   emoji: string;
   animation?: string;
-  vocalization?: 'chirp' | 'purr' | 'babble' | 'roar' | 'none';
+  vocalization?: 'chirp' | 'purr' | 'whimper' | 'growl' | 'roar' | 'none' | 'babble';
   /** Personality bias: positive = more likely if trait is high */
   personalityBias?: Partial<LearnedPersonality>;
   /** Minimum stage required */

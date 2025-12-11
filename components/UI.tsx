@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback  } from 'react';
-import { GameState, Stage, GameContextType, TimeOfDay, PointNotification, LearnedPersonality, SignificantMemory, PersonalityDimension, CareGrade } from '../types';
+import { GameState, Stage, GameContextType, TimeOfDay, PointNotification, LearnedPersonality, SignificantMemory, PersonalityDimension, CareGrade, ObedienceRecord } from '../types';
 import { audioService } from '../services/audioService';
 import { POINT_NOTIFICATION_CONFIG, PERSONALITY_CONFIG, PERSONALITY_DESCRIPTORS } from '../constants';
 import {  generatePyraPortrait, getCachedPortrait, hasImageGenerationCapability } from '../services/geminiService';
