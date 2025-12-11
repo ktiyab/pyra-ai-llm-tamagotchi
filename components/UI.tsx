@@ -3,6 +3,7 @@ import { GameState, Stage, GameContextType, TimeOfDay, PointNotification, Learne
 import { audioService } from '../services/audioService';
 import { POINT_NOTIFICATION_CONFIG, PERSONALITY_CONFIG, PERSONALITY_DESCRIPTORS } from '../constants';
 import {  generatePyraPortrait, getCachedPortrait, hasImageGenerationCapability } from '../services/geminiService';
+import TutorialModal from './TutorialModal';
 
 interface UIProps {
   game: GameContextType;
@@ -61,6 +62,9 @@ const Icons = {
   Card: ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
   ),
+  Help: ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+  ),  
 };
 
 // --- Helpers ---
@@ -1255,6 +1259,7 @@ const UI: React.FC<UIProps> = ({ game }) => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [isMuted, setIsMuted] = useState(!audioService.isAmbientPlaying());
   const [showMemories, setShowMemories] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [showPyraCard, setShowPyraCard] = useState(false);
 
   useEffect(() => { if (state.stage === Stage.HATCHLING) setIsMuted(false); }, [state.stage]);
@@ -1284,6 +1289,9 @@ const UI: React.FC<UIProps> = ({ game }) => {
       {/* Memory Journal Modal - FIXED: Now properly interactive */}
       <MemoryJournal memories={state.learnedBehavior.memories} isOpen={showMemories} onClose={() => setShowMemories(false)} />
 
+      {/* Tutorial Modal */}
+      <TutorialModal isOpen={showTutorial} onClose={() => setShowTutorial(false)} />      
+
       {/* FIXED: Add PyraCard Modal */}
       <PyraCard state={state} isOpen={showPyraCard} onClose={() => setShowPyraCard(false)} />
 
@@ -1293,11 +1301,37 @@ const UI: React.FC<UIProps> = ({ game }) => {
 
         {/* Control Buttons */}
         <div className="flex items-center gap-2 p-2 bg-black/30 backdrop-blur-xl border border-white/10 rounded-full shadow-lg">
-          <button onClick={toggleSound} className="group p-2.5 rounded-full bg-transparent hover:bg-orange-500/20 border border-transparent hover:border-orange-500/50 transition-all" title={isMuted ? "Unmute" : "Mute"}>
-            {isMuted ? <Icons.VolumeX className="w-5 h-5 text-stone-500 group-hover:text-orange-400 transition-colors" /> : <Icons.Volume2 className="w-5 h-5 text-orange-400 group-hover:text-orange-300 transition-colors" />}
+          {/* Help/Tutorial Button */}
+          <button 
+            onClick={() => setShowTutorial(true)} 
+            className="group p-2.5 rounded-full bg-transparent hover:bg-cyan-500/20 border border-transparent hover:border-cyan-500/50 transition-all" 
+            title="How to Play"
+          >
+            <Icons.Help className="w-5 h-5 text-stone-500 group-hover:text-cyan-400 transition-colors" />
           </button>
+          
+          <div className="w-px h-5 bg-white/10" />
+          
+          {/* Sound Toggle */}
+          <button 
+            onClick={toggleSound} 
+            className="group p-2.5 rounded-full bg-transparent hover:bg-orange-500/20 border border-transparent hover:border-orange-500/50 transition-all" 
+            title={isMuted ? "Unmute" : "Mute"}
+          >
+            {isMuted ? (
+              <Icons.VolumeX className="w-5 h-5 text-stone-500 group-hover:text-orange-400 transition-colors" />
+            ) : (
+              <Icons.Volume2 className="w-5 h-5 text-orange-400 group-hover:text-orange-300 transition-colors" />
+            )}
+          </button>
+          
+          {/* Reset Button (Desktop Only) */}
           <div className="hidden md:block w-px h-5 bg-white/10" />
-          <button onClick={resetGame} className="hidden md:flex group p-2.5 rounded-full bg-transparent hover:bg-red-500/20 border border-transparent hover:border-red-500/50 transition-all" title="Reset">
+          <button 
+            onClick={resetGame} 
+            className="hidden md:flex group p-2.5 rounded-full bg-transparent hover:bg-red-500/20 border border-transparent hover:border-red-500/50 transition-all" 
+            title="Reset"
+          >
             <Icons.RotateCcw className="w-5 h-5 text-stone-500 group-hover:text-red-400 transition-colors" />
           </button>
         </div>

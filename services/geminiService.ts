@@ -649,7 +649,7 @@ STYLE:
     // FALLBACK PROMPT (text-only, no reference image)
     return `A cute ${ctx.age} T-Rex dinosaur named ${creatureName}, ` +
            `${satDesc} ${lightDesc} ${bodyColor} colored skin ${patternDesc}, ` +
-           `beautiful glowing ${eyeColor} eyes, ` +
+           `beautiful ${eyeColor} eyes, ` +
            `${expression}, ${mood} mood, ` +
            `${ctx.extras}, ` +
            `background: ${ctx.background}, ` +

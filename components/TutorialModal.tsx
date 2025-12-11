@@ -208,6 +208,59 @@ const TUTORIAL_PAGES: TutorialPage[] = [
     ),
   },
   {
+    title: "Share Your Pyra!",
+    emoji: "📸",
+    content: (
+      <div className="space-y-5">
+        <p className="text-stone-300 text-lg">
+          Want to show off your unique dinosaur? Create a <strong className="text-pink-400">Pyra Card</strong> to share with friends and family!
+        </p>
+        
+        <div className="bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-cyan-500/20 border border-white/20 rounded-2xl p-5">
+          <div className="flex items-center gap-4 mb-4">
+            <span className="text-5xl">🎨</span>
+            <div>
+              <p className="text-white font-bold text-xl">AI Portrait Magic!</p>
+              <p className="text-stone-400 text-base">Your card can include a unique AI-generated portrait of YOUR Pyra, in their exact colors!</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-stone-400 text-base font-medium">Your card shows:</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
+              <span className="text-2xl">🦖</span>
+              <span className="text-stone-300 text-base">Pyra's unique colors</span>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
+              <span className="text-2xl">✨</span>
+              <span className="text-stone-300 text-base">Personality traits</span>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
+              <span className="text-2xl">📖</span>
+              <span className="text-stone-300 text-base">A special memory</span>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
+              <span className="text-2xl">💝</span>
+              <span className="text-stone-300 text-base">Your care grade</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4">
+          <p className="text-purple-300 text-base">
+            <strong>How to find it:</strong> Open the <span className="text-cyan-400">Personality</span> panel on the left, then tap <span className="text-pink-400">"Share Card"</span> button!
+          </p>
+        </div>
+
+        <p className="text-stone-500 text-sm italic text-center">
+          Every Pyra card is one-of-a-kind, just like your dinosaur! 🌟
+        </p>
+      </div>
+    ),
+  },
+  {
     title: "Quick Tips",
     emoji: "✨",
     content: (
