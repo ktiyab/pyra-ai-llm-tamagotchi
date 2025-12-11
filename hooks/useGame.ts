@@ -20,6 +20,7 @@ import { generateCatResponse, AudioInput } from '../services/geminiService';
 import { audioService } from '../services/audioService';
 import { animController } from '../services/animationController';
 import { behaviorService } from '../services/behaviorService';
+import { clearPortraitCache } from '../services/geminiService';
 
 // FIXED: Updated storage key for new learned behavior system
 // const STORAGE_KEY = 'mochi_pyra_state_v3';
@@ -306,6 +307,9 @@ const initialState: GameState = {
   },
   // FIXED: Add lastSurpriseTime
   lastSurpriseTime: 0,
+  // FIXED: Add to initialState
+  cachedPortrait: null,
+  cachedPortraitStage: null,  
 };
 
 // =============================================
@@ -1614,7 +1618,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'MARK_TUTORIAL_SEEN':
       return { ...state, tutorialSeen: true };
 
-    // FIXED: Add to gameReducer in useGame.ts (~line 750)
     case 'UPDATE_SURPRISE_TIME': {
       return {
         ...state,
@@ -1999,7 +2002,6 @@ export const useGame = () => {
 
 
   // UPDATE resetGame to use PERSISTENCE_CONFIG
-
   const resetGame = useCallback(() => {
     const { STORAGE_KEY, LEGACY_STORAGE_KEY } = PERSISTENCE_CONFIG;
     
@@ -2018,6 +2020,9 @@ export const useGame = () => {
     } catch (e) {
       console.error('Failed to clear storage on reset:', e);
     }
+    
+    // FIXED: Clear portrait cache on reset
+    clearPortraitCache();
     
     // Reset state
     baseDispatch({ type: 'RESET', payload: generateSeed() });

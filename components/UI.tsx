@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback  } from 'react';
 import { GameState, Stage, GameContextType, TimeOfDay, PointNotification, LearnedPersonality, SignificantMemory, PersonalityDimension, CareGrade } from '../types';
 import { audioService } from '../services/audioService';
 import { POINT_NOTIFICATION_CONFIG, PERSONALITY_CONFIG, PERSONALITY_DESCRIPTORS } from '../constants';
+import {  generatePyraPortrait, getCachedPortrait, hasImageGenerationCapability } from '../services/geminiService';
 
 interface UIProps {
   game: GameContextType;
@@ -500,7 +501,7 @@ const MemoryJournal: React.FC<MemoryJournalProps> = ({ memories, isOpen, onClose
 };
 
 // =============================================
-// PYRA CARD - SHAREABLE IDENTITY
+// PYRA CARD - SHAREABLE IDENTITY (KID-FRIENDLY SIZE)
 // =============================================
 
 interface PyraCardProps {
@@ -513,22 +514,24 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  
+  // AI Portrait state
+  const [portrait, setPortrait] = useState<string | null>(null);
+  const [isGeneratingPortrait, setIsGeneratingPortrait] = useState(false);
+  const [portraitError, setPortraitError] = useState(false);
 
   // Calculate creature colors from seed (matching Scene.tsx logic)
   const creatureColors = useMemo(() => {
     const { baseHue, saturation, lightness } = state.seed.appearance;
     
-    // Body color
     const bodyH = baseHue;
     const bodyS = saturation;
     const bodyL = lightness;
     
-    // Eye color (complementary hue)
     const eyeH = (baseHue + 180) % 360;
     const eyeS = 90;
     const eyeL = 60;
     
-    // Accent color (slightly shifted)
     const accentH = (baseHue + 30) % 360;
     const accentS = Math.min(100, saturation + 10);
     const accentL = Math.min(70, lightness + 15);
@@ -561,7 +564,6 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
     const memories = state.learnedBehavior.memories;
     if (memories.length === 0) return null;
     
-    // Prioritize: milestones > high impact > recent
     const sorted = [...memories].sort((a, b) => {
       if (a.isMilestone !== b.isMilestone) return a.isMilestone ? -1 : 1;
       const impactA = Object.values(a.personalityImpact).reduce((s, v) => s + Math.abs(v || 0), 0);
@@ -573,8 +575,42 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
     return sorted[0];
   }, [state.learnedBehavior.memories]);
 
-  // Days together
   const daysTogether = Math.floor(state.ageHours / 24);
+
+  // Load or generate portrait when card opens
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    setPortraitError(false);
+    
+    const cached = getCachedPortrait(state.seed.id, state.stage);
+    if (cached) {
+      setPortrait(cached);
+      return;
+    }
+    
+    const generatePortrait = async () => {
+      const hasCapability = await hasImageGenerationCapability();
+      if (!hasCapability) {
+        setPortrait(null);
+        return;
+      }
+      
+      setIsGeneratingPortrait(true);
+      try {
+        const result = await generatePyraPortrait(state);
+        setPortrait(result);
+        if (!result) setPortraitError(true);
+      } catch (e) {
+        console.error('Portrait generation failed:', e);
+        setPortraitError(true);
+      } finally {
+        setIsGeneratingPortrait(false);
+      }
+    };
+    
+    generatePortrait();
+  }, [isOpen, state]);
 
   // Generate share text
   const generateShareText = useCallback(() => {
@@ -608,7 +644,6 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
   const handleShare = useCallback(async () => {
     const shareText = generateShareText();
     
-    // Try Web Share API first
     if (navigator.share) {
       try {
         await navigator.share({
@@ -617,12 +652,10 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
         });
         return;
       } catch (err) {
-        // User cancelled or error - fall through to clipboard
         if ((err as Error).name === 'AbortError') return;
       }
     }
     
-    // Fallback to clipboard
     try {
       await navigator.clipboard.writeText(shareText);
       setCopySuccess(true);
@@ -651,181 +684,243 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
   const gradeConfig = CARE_GRADE_CONFIG[aggregates.careGrade];
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 pointer-events-auto">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-3 pointer-events-auto overflow-y-auto">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-lg" onClick={onClose} />
       
-      {/* Card Container */}
+      {/* Card Container - ENLARGED */}
       <div 
         ref={cardRef}
-        className="relative w-full max-w-sm"
+        className="relative w-full max-w-lg my-4"
         onClick={(e) => e.stopPropagation()}
       >
         {/* The Card */}
         <div 
-          className="relative overflow-hidden rounded-3xl shadow-2xl border-2 border-white/20"
+          className="relative overflow-hidden rounded-[2rem] shadow-2xl border-4 border-white/30"
           style={{ background: creatureColors.gradient }}
         >
           {/* Decorative Pattern Overlay */}
           <div 
-            className="absolute inset-0 opacity-10"
+            className="absolute inset-0 opacity-15"
             style={{
               backgroundImage: `radial-gradient(circle at 20% 80%, ${creatureColors.eye} 0%, transparent 50%),
-                               radial-gradient(circle at 80% 20%, ${creatureColors.accent} 0%, transparent 50%)`,
+                               radial-gradient(circle at 80% 20%, ${creatureColors.accent} 0%, transparent 50%),
+                               radial-gradient(circle at 50% 50%, white 0%, transparent 70%)`,
             }}
           />
           
+          {/* Sparkle decorations */}
+          <div className="absolute top-4 right-8 text-3xl animate-pulse">✨</div>
+          <div className="absolute top-12 right-4 text-2xl animate-pulse" style={{ animationDelay: '0.5s' }}>⭐</div>
+          <div className="absolute bottom-20 left-4 text-2xl animate-pulse" style={{ animationDelay: '0.3s' }}>✨</div>
+          
           {/* Content */}
-          <div className="relative p-6 space-y-4">
+          <div className="relative p-8 space-y-6">
             
-            {/* Header: Avatar + Name + Stage */}
-            <div className="flex items-center gap-4">
-              {/* Creature Avatar Circle */}
+            {/* LARGE PORTRAIT SECTION */}
+            <div className="flex flex-col items-center">
+              {/* Portrait Frame - MUCH BIGGER */}
               <div 
-                className="w-20 h-20 rounded-full flex items-center justify-center border-4 shadow-lg"
+                className="w-44 h-44 rounded-full flex items-center justify-center border-[6px] shadow-2xl overflow-hidden relative"
                 style={{ 
                   backgroundColor: creatureColors.bodyDark,
                   borderColor: creatureColors.bodyLight,
+                  boxShadow: `0 0 30px ${creatureColors.eye}40, 0 8px 32px rgba(0,0,0,0.4)`,
                 }}
               >
-                {/* Simple creature representation */}
-                <div className="relative">
-                  <span className="text-4xl">{stageInfo.emoji}</span>
-                  {/* Eye glow dots */}
-                  <div 
-                    className="absolute top-1 left-2 w-2 h-2 rounded-full animate-pulse"
-                    style={{ backgroundColor: creatureColors.eye, boxShadow: `0 0 8px ${creatureColors.eye}` }}
+                {/* AI Generated Portrait */}
+                {portrait && (
+                  <img 
+                    src={portrait} 
+                    alt={`${state.name || 'Pyra'} portrait`}
+                    className="w-full h-full object-cover"
                   />
-                  <div 
-                    className="absolute top-1 right-2 w-2 h-2 rounded-full animate-pulse"
-                    style={{ backgroundColor: creatureColors.eye, boxShadow: `0 0 8px ${creatureColors.eye}`, animationDelay: '0.5s' }}
-                  />
-                </div>
+                )}
+                
+                {/* Loading State */}
+                {isGeneratingPortrait && !portrait && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 gap-3">
+                    <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="text-white/80 text-sm font-medium">Creating art...</span>
+                  </div>
+                )}
+                
+                {/* Fallback: Large Emoji + Eye Glow */}
+                {!portrait && !isGeneratingPortrait && (
+                  <div className="relative flex items-center justify-center">
+                    <span className="text-8xl drop-shadow-lg">{stageInfo.emoji}</span>
+                    <div 
+                      className="absolute top-6 left-8 w-4 h-4 rounded-full animate-pulse"
+                      style={{ backgroundColor: creatureColors.eye, boxShadow: `0 0 16px ${creatureColors.eye}` }}
+                    />
+                    <div 
+                      className="absolute top-6 right-8 w-4 h-4 rounded-full animate-pulse"
+                      style={{ backgroundColor: creatureColors.eye, boxShadow: `0 0 16px ${creatureColors.eye}`, animationDelay: '0.5s' }}
+                    />
+                  </div>
+                )}
+                
+                {/* AI Badge - Larger */}
+                {portrait && (
+                  <div className="absolute bottom-1 right-1 bg-purple-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                    ✨ AI
+                  </div>
+                )}
               </div>
               
-              {/* Name + Stage */}
-              <div className="flex-1">
-                <h1 className="text-3xl font-black text-white drop-shadow-lg leading-tight">
-                  {state.name || 'Pyra'}
-                </h1>
-                <div className="flex items-center gap-2 mt-1">
-                  <span 
-                    className="px-3 py-0.5 rounded-full text-sm font-bold uppercase tracking-wider"
-                    style={{ backgroundColor: creatureColors.bodyDark, color: creatureColors.bodyLight }}
-                  >
-                    {stageInfo.label}
+              {/* Name - BIG AND BOLD */}
+              <h1 className="mt-5 text-5xl font-black text-white drop-shadow-xl leading-tight text-center tracking-tight">
+                {state.name || 'Pyra'}
+              </h1>
+              
+              {/* Stage Badge + Streak */}
+              <div className="flex items-center gap-3 mt-3">
+                <span 
+                  className="px-5 py-1.5 rounded-full text-lg font-bold uppercase tracking-wider shadow-lg"
+                  style={{ backgroundColor: creatureColors.bodyDark, color: creatureColors.bodyLight }}
+                >
+                  {stageInfo.emoji} {stageInfo.label}
+                </span>
+                {state.streak.current > 1 && (
+                  <span className="flex items-center gap-1 bg-amber-500/90 text-white px-4 py-1.5 rounded-full text-lg font-bold shadow-lg">
+                    🔥 {state.streak.current}
                   </span>
-                  {state.streak.current > 1 && (
-                    <span className="flex items-center gap-1 text-amber-300 text-sm font-bold">
-                      🔥 {state.streak.current}
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Stats Row */}
-            <div className="flex items-center justify-between px-2">
-              {/* Days Together */}
-              <div className="text-center">
-                <div className="text-2xl font-black text-white">{daysTogether}</div>
-                <div className="text-xs text-white/70 uppercase tracking-wider">Days</div>
+            {/* Stats Row - BIGGER */}
+            <div className="flex items-center justify-around py-4 px-2 bg-black/20 rounded-2xl">
+              <div className="text-center px-4">
+                <div className="text-4xl font-black text-white drop-shadow-lg">{daysTogether}</div>
+                <div className="text-sm text-white/80 uppercase tracking-wider font-semibold mt-1">Days</div>
               </div>
               
-              {/* Care Grade */}
-              <div className="text-center">
-                <div 
-                  className="text-2xl font-black"
-                  style={{ color: gradeConfig.color }}
-                >
+              <div className="w-px h-12 bg-white/20" />
+              
+              <div className="text-center px-4">
+                <div className="text-4xl font-black drop-shadow-lg" style={{ color: gradeConfig.color }}>
                   {aggregates.careGrade}
                 </div>
-                <div className="text-xs text-white/70 uppercase tracking-wider">Grade</div>
+                <div className="text-sm text-white/80 uppercase tracking-wider font-semibold mt-1">Grade</div>
               </div>
               
-              {/* Trust */}
-              <div className="text-center">
-                <div className="text-2xl font-black text-white">{Math.round(state.bond.trust)}</div>
-                <div className="text-xs text-white/70 uppercase tracking-wider">Trust</div>
+              <div className="w-px h-12 bg-white/20" />
+              
+              <div className="text-center px-4">
+                <div className="text-4xl font-black text-white drop-shadow-lg">{Math.round(state.bond.trust)}</div>
+                <div className="text-sm text-white/80 uppercase tracking-wider font-semibold mt-1">Trust</div>
               </div>
               
-              {/* Memories */}
-              <div className="text-center">
-                <div className="text-2xl font-black text-white">{state.learnedBehavior.memories.length}</div>
-                <div className="text-xs text-white/70 uppercase tracking-wider">Memories</div>
+              <div className="w-px h-12 bg-white/20" />
+              
+              <div className="text-center px-4">
+                <div className="text-4xl font-black text-white drop-shadow-lg">{state.learnedBehavior.memories.length}</div>
+                <div className="text-sm text-white/80 uppercase tracking-wider font-semibold mt-1">Memories</div>
               </div>
             </div>
 
-            {/* Dominant Traits */}
+            {/* Dominant Traits - BIGGER PILLS */}
             {aggregates.dominantTraits.length > 0 && (
-              <div className="flex flex-wrap gap-2 justify-center">
+              <div className="flex flex-wrap gap-3 justify-center">
                 {aggregates.dominantTraits.map(trait => (
                   <span 
                     key={trait}
-                    className="px-3 py-1 rounded-full text-sm font-bold capitalize"
+                    className="px-5 py-2 rounded-full text-lg font-bold capitalize shadow-md"
                     style={{ 
-                      backgroundColor: 'rgba(255,255,255,0.2)', 
+                      backgroundColor: 'rgba(255,255,255,0.25)', 
                       color: 'white',
-                      backdropFilter: 'blur(4px)',
+                      backdropFilter: 'blur(8px)',
+                      border: '2px solid rgba(255,255,255,0.3)',
                     }}
                   >
-                    {trait}
+                    ✨ {trait}
                   </span>
                 ))}
               </div>
             )}
 
-            {/* Featured Memory Quote */}
+            {/* Featured Memory Quote - BIGGER */}
             {featuredMemory && (
               <div 
-                className="relative p-4 rounded-xl mt-2"
-                style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
+                className="relative p-6 rounded-2xl"
+                style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
               >
-                <span className="absolute -top-2 left-3 text-2xl opacity-50">"</span>
-                <p className="text-white/90 text-sm italic text-center leading-relaxed">
+                <span className="absolute -top-1 left-4 text-4xl opacity-60">"</span>
+                <p className="text-white text-xl italic text-center leading-relaxed font-medium px-4">
                   {featuredMemory.narrative}
                 </p>
-                <span className="absolute -bottom-3 right-3 text-2xl opacity-50">"</span>
+                <span className="absolute -bottom-2 right-4 text-4xl opacity-60">"</span>
               </div>
             )}
 
-            {/* Appearance Info */}
-            <div className="flex items-center justify-center gap-4 text-xs text-white/60">
+            {/* Appearance Info - READABLE */}
+            <div className="flex items-center justify-center gap-4 text-base text-white/70 font-medium">
               <span className="capitalize">{state.seed.appearance.scalePattern} scales</span>
-              <span>•</span>
+              <span className="text-white/40">•</span>
               <span className="capitalize">{state.seed.appearance.size} size</span>
+              {portrait && (
+                <>
+                  <span className="text-white/40">•</span>
+                  <span className="text-purple-300 font-semibold">✨ AI Portrait</span>
+                </>
+              )}
             </div>
 
-            {/* Share Button */}
+            {/* Generate Portrait Button */}
+            {!portrait && portraitError && (
+              <button
+                onClick={async () => {
+                  setPortraitError(false);
+                  setIsGeneratingPortrait(true);
+                  try {
+                    const result = await generatePyraPortrait(state);
+                    setPortrait(result);
+                    if (!result) setPortraitError(true);
+                  } catch (e) {
+                    setPortraitError(true);
+                  } finally {
+                    setIsGeneratingPortrait(false);
+                  }
+                }}
+                disabled={isGeneratingPortrait}
+                className="w-full py-3 rounded-xl text-lg font-bold transition-all bg-white/15 hover:bg-white/25 text-white border-2 border-white/20"
+              >
+                {isGeneratingPortrait ? '🎨 Creating...' : '🎨 Create AI Portrait'}
+              </button>
+            )}
+
+            {/* Share Button - BIG AND INVITING */}
             <button
               onClick={handleShare}
-              className="w-full py-3 rounded-xl font-bold text-lg transition-all active:scale-95"
+              className="w-full py-5 rounded-2xl font-black text-2xl transition-all active:scale-95 shadow-xl"
               style={{ 
                 backgroundColor: creatureColors.bodyDark,
                 color: creatureColors.bodyLight,
+                border: `3px solid ${creatureColors.bodyLight}`,
               }}
             >
               {copySuccess ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span>✓</span> Copied to Clipboard!
+                <span className="flex items-center justify-center gap-3">
+                  <span className="text-3xl">✓</span> Copied!
                 </span>
               ) : shareError ? (
                 <span className="text-red-300">{shareError}</span>
               ) : (
-                <span className="flex items-center justify-center gap-2">
-                  <span>📤</span> Share My Pyra
+                <span className="flex items-center justify-center gap-3">
+                  <span className="text-3xl">📤</span> Share My Pyra!
                 </span>
               )}
             </button>
           </div>
         </div>
 
-        {/* Close Button */}
+        {/* Close Button - BIGGER */}
         <button 
           onClick={onClose}
-          className="absolute -top-3 -right-3 w-10 h-10 bg-stone-800 hover:bg-stone-700 border-2 border-white/20 rounded-full flex items-center justify-center transition-colors shadow-lg"
+          className="absolute -top-2 -right-2 w-14 h-14 bg-stone-800 hover:bg-stone-700 border-4 border-white/30 rounded-full flex items-center justify-center transition-colors shadow-xl"
         >
-          <Icons.X className="w-5 h-5 text-white" />
+          <Icons.X className="w-7 h-7 text-white" />
         </button>
       </div>
     </div>

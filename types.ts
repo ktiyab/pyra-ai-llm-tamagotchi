@@ -405,6 +405,7 @@ export interface GameState {
   
   // FIXED: Add daily surprise tracking
   lastSurpriseTime: number;
+  
 }
 
 // =============================================
