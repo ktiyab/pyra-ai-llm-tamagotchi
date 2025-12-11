@@ -402,6 +402,9 @@ export interface GameState {
   activeCelebration: CelebrationData | null;
   celebrationHistory: CelebrationTracking;
   streak: StreakData;  
+  
+  // FIXED: Add daily surprise tracking
+  lastSurpriseTime: number;
 }
 
 // =============================================
@@ -481,6 +484,8 @@ export type GameAction =
   // NEW: Celebration actions
   | { type: 'TRIGGER_CELEBRATION'; payload: CelebrationData }
   | { type: 'DISMISS_CELEBRATION' }
+  // FIXED: Add to GameAction type in types.ts
+  | { type: 'UPDATE_SURPRISE_TIME' }  
   | { type: 'UPDATE_STREAK' };
 // =============================================
 // CELEBRATION SYSTEM

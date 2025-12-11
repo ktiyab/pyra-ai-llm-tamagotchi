@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { CelebrationData } from '../types';
+import { audioService } from '../services/audioService';
 
 interface CelebrationModalProps {
   celebration: CelebrationData | null;
@@ -27,7 +28,12 @@ const CONFETTI_COLORS = [
   '#a855f7', '#ec4899', '#14b8a6', '#f43f5e'
 ];
 
-const Confetti: React.FC<{ active: boolean }> = ({ active }) => {
+interface ConfettiProps {
+  active: boolean;
+  intensity?: 'normal' | 'high';
+}
+
+const Confetti: React.FC<ConfettiProps> = ({ active, intensity = 'normal' }) => {
   const [particles, setParticles] = useState<Particle[]>([]);
 
   useEffect(() => {
@@ -36,9 +42,11 @@ const Confetti: React.FC<{ active: boolean }> = ({ active }) => {
       return;
     }
 
-    // Generate particles
+    // FIXED: More particles for high intensity (evolution)
+    const particleCount = intensity === 'high' ? 100 : 60;
+    
     const newParticles: Particle[] = [];
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < particleCount; i++) {
       newParticles.push({
         id: i,
         x: Math.random() * 100,
@@ -46,26 +54,25 @@ const Confetti: React.FC<{ active: boolean }> = ({ active }) => {
         rotation: Math.random() * 360,
         color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
         scale: 0.5 + Math.random() * 0.5,
-        velocityX: (Math.random() - 0.5) * 3,
+        velocityX: (Math.random() - 0.5) * 4, // FIXED: Wider spread for high intensity
         velocityY: 2 + Math.random() * 3,
         rotationSpeed: (Math.random() - 0.5) * 10,
       });
     }
     setParticles(newParticles);
 
-    // Animate particles
     const interval = setInterval(() => {
       setParticles(prev => prev.map(p => ({
         ...p,
         x: p.x + p.velocityX,
         y: p.y + p.velocityY,
         rotation: p.rotation + p.rotationSpeed,
-        velocityY: p.velocityY + 0.1, // Gravity
-      })).filter(p => p.y < 120)); // Remove off-screen
+        velocityY: p.velocityY + 0.1,
+      })).filter(p => p.y < 120));
     }, 50);
 
     return () => clearInterval(interval);
-  }, [active]);
+  }, [active, intensity]);
 
   if (!active || particles.length === 0) return null;
 
@@ -104,8 +111,20 @@ const CelebrationModal: React.FC<CelebrationModalProps> = ({ celebration, onDism
         setShowConfetti(true);
       });
 
+      // FIXED: Play celebration sound based on type
+      const isEvolution = celebration.type === 'evolution' || celebration.type === 'first_word';
+      const isMilestone = celebration.type === 'trust_milestone' || celebration.type === 'streak_milestone';
+      
+      if (isEvolution) {
+        audioService.playCelebration('fanfare');
+      } else if (isMilestone) {
+        audioService.playCelebration('milestone');
+      } else {
+        audioService.playCelebration('discovery');
+      }
+
       // Auto-dismiss after delay (longer for evolutions)
-      const duration = celebration.type === 'evolution' ? 8000 : 5000;
+      const duration = isEvolution ? 8000 : 5000;
       const timer = setTimeout(() => {
         handleDismiss();
       }, duration);
@@ -155,7 +174,11 @@ const CelebrationModal: React.FC<CelebrationModalProps> = ({ celebration, onDism
       />
 
       {/* Confetti */}
-      <Confetti active={showConfetti} />
+      // FIXED: In CelebrationModal component, update Confetti usage (~line 150)
+      <Confetti 
+        active={showConfetti} 
+        intensity={isEvolution ? 'high' : 'normal'} 
+      />
 
       {/* Modal Content */}
       <div

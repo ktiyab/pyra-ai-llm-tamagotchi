@@ -14,7 +14,7 @@ import {
   OBEDIENCE_HISTORY_CONFIG, STAGE_DELTA_MULTIPLIERS, INITIAL_LEARNED_BEHAVIOR,
   PERSONALITY_CONFIG, MEMORY_CONFIG, KNOWLEDGE_CONFIG, INTERACTION_PATTERN_CONFIG,
   PERSISTENCE_CONFIG, CELEBRATION_CONFIG, EVOLUTION_CELEBRATIONS, TRUST_MILESTONE_MESSAGES,
-  STREAK_MESSAGES,
+  STREAK_MESSAGES, DAILY_SURPRISE_CONFIG, DAILY_SURPRISES, DailySurprise,
 } from '../constants';
 import { generateCatResponse, AudioInput } from '../services/geminiService';
 import { audioService } from '../services/audioService';
@@ -303,7 +303,9 @@ const initialState: GameState = {
     current: 0,
     longest: 0,
     lastCheckIn: Date.now(),
-  },    
+  },
+  // FIXED: Add lastSurpriseTime
+  lastSurpriseTime: 0,
 };
 
 // =============================================
@@ -712,6 +714,74 @@ const getKindnessNarration = (
   }
   
   return null;
+};
+
+// =============================================
+// DAILY SURPRISE SELECTION
+// =============================================
+
+/**
+ * Selects a surprise weighted by personality affinity.
+ * Returns null if conditions not met.
+ */
+const selectDailySurprise = (
+  state: GameState,
+  hoursSinceLastVisit: number
+): DailySurprise | null => {
+  const { MIN_HOURS_AWAY, COOLDOWN_HOURS, CHANCE_ON_RETURN } = DAILY_SURPRISE_CONFIG;
+  
+  // Check minimum time away
+  if (hoursSinceLastVisit < MIN_HOURS_AWAY) return null;
+  
+  // Check cooldown
+  const hoursSinceLastSurprise = (Date.now() - state.lastSurpriseTime) / (1000 * 60 * 60);
+  if (hoursSinceLastSurprise < COOLDOWN_HOURS) return null;
+  
+  // Roll for surprise
+  if (Math.random() > CHANCE_ON_RETURN) return null;
+  
+  // Filter eligible surprises by stage
+  const stageOrder = [Stage.EGG, Stage.HATCHLING, Stage.PUPPY, Stage.JUVENILE, Stage.ADOLESCENT, Stage.ADULT];
+  const currentStageIdx = stageOrder.indexOf(state.stage);
+  
+  const eligible = DAILY_SURPRISES.filter(s => {
+    if (!s.minStage) return true;
+    const minIdx = stageOrder.indexOf(s.minStage);
+    return currentStageIdx >= minIdx;
+  });
+  
+  if (eligible.length === 0) return null;
+  
+  // Weight by personality affinity
+  const personality = state.learnedBehavior.personality;
+  const weighted = eligible.map(surprise => {
+    let weight = 10; // Base weight
+    
+    if (surprise.personalityBias) {
+      for (const [dim, bias] of Object.entries(surprise.personalityBias)) {
+        const personalityValue = personality[dim as keyof LearnedPersonality] || 0;
+        // If bias is positive and personality matches direction, increase weight
+        // e.g., bias: { energy: 30 } and personality.energy = 50 → bonus
+        if ((bias > 0 && personalityValue > 0) || (bias < 0 && personalityValue < 0)) {
+          weight += Math.abs(bias) * (Math.abs(personalityValue) / 100);
+        }
+      }
+    }
+    
+    return { surprise, weight };
+  });
+  
+  // Weighted random selection
+  const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
+  let roll = Math.random() * totalWeight;
+  
+  for (const { surprise, weight } of weighted) {
+    roll -= weight;
+    if (roll <= 0) return surprise;
+  }
+  
+  // Fallback to random
+  return eligible[Math.floor(Math.random() * eligible.length)];
 };
 
 // =============================================
@@ -1544,6 +1614,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'MARK_TUTORIAL_SEEN':
       return { ...state, tutorialSeen: true };
 
+    // FIXED: Add to gameReducer in useGame.ts (~line 750)
+    case 'UPDATE_SURPRISE_TIME': {
+      return {
+        ...state,
+        lastSurpriseTime: Date.now(),
+      };
+    }      
+
     default:
       return state;
   }
@@ -1700,15 +1778,84 @@ export const useGame = () => {
     };
   }, []); // Empty deps - uses refs for current state
 
-  // Initial greeting
+  // Initial greeting with daily surprise support
   useEffect(() => {
     if (state.stage === Stage.EGG) return;
+    
     const hoursSince = (Date.now() - state.lastInteraction) / (1000 * 60 * 60);
     
-    if (hoursSince > 24) {
-      dispatch({ type: 'LLM_RESPONSE', payload: { speech: '', narrative: 'Pyra looks up, eyes dull.', emotion: 'hurt', animation: { primary: 'Idle_2' }, vocalization: 'none' } });
+    // Check for daily surprise
+    const surprise = selectDailySurprise(state, hoursSince);
+    
+    if (hoursSince > 48) {
+      // Very long absence - sad return, no surprise
+      dispatch({ 
+        type: 'LLM_RESPONSE', 
+        payload: { 
+          speech: '', 
+          narrative: 'Pyra looks up with dull eyes... but brightens seeing you!', 
+          emotion: 'hurt', 
+          animation: { primary: 'Idle_2', transition_to: 'idle' }, 
+          vocalization: 'whimper' 
+        } 
+      });
+    } else if (surprise) {
+      // FIXED: Daily surprise greeting!
+      dispatch({ 
+        type: 'LLM_RESPONSE', 
+        payload: { 
+          speech: '', 
+          narrative: surprise.message, 
+          emotion: 'excited', 
+          animation: { 
+            primary: surprise.animation || 'idle', 
+            transition_to: 'idle' 
+          }, 
+          vocalization: surprise.vocalization || 'chirp' 
+        } 
+      });
+      
+      // Play discovery sound
+      audioService.playCelebration('discovery');
+      
+      // Update last surprise time (dispatch action needed)
+      baseDispatch({ type: 'UPDATE_SURPRISE_TIME' });
+      
+      // Add narrator message for emphasis
+      dispatch({ 
+        type: 'ADD_MESSAGE', 
+        payload: { 
+          id: crypto.randomUUID(), 
+          role: 'narrator', 
+          text: `${surprise.emoji} ${surprise.message}`, 
+          timestamp: Date.now() 
+        } 
+      });
+    } else if (hoursSince > 24) {
+      // Long absence but no surprise
+      dispatch({ 
+        type: 'LLM_RESPONSE', 
+        payload: { 
+          speech: '', 
+          narrative: 'Pyra perks up! They missed you!', 
+          emotion: 'excited', 
+          animation: { primary: 'Run_Forward', transition_to: 'run to stop' }, 
+          vocalization: 'chirp' 
+        } 
+      });
+      audioService.playVocalization('chirp');
     } else {
-      dispatch({ type: 'LLM_RESPONSE', payload: { speech: '', narrative: 'Pyra runs to you!', emotion: 'excited', animation: { primary: 'Run_Forward', transition_to: 'run to stop' }, vocalization: 'chirp' } });
+      // Normal return
+      dispatch({ 
+        type: 'LLM_RESPONSE', 
+        payload: { 
+          speech: '', 
+          narrative: 'Pyra runs to you!', 
+          emotion: 'excited', 
+          animation: { primary: 'Run_Forward', transition_to: 'run to stop' }, 
+          vocalization: 'chirp' 
+        } 
+      });
       audioService.playVocalization('chirp');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

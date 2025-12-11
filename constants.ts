@@ -767,3 +767,269 @@ export const STREAK_MESSAGES: Record<number, {
   60: { title: "Two Months!", subtitle: "Your bond is legendary!", emoji: "👑" },
   100: { title: "100 Days!", subtitle: "A friendship for the ages!", emoji: "💎" },
 };
+
+
+// =============================================
+// DAILY SURPRISE SYSTEM CONFIGURATION
+// =============================================
+
+export const DAILY_SURPRISE_CONFIG = {
+  /** Probability of surprise on return (0-1) */
+  CHANCE_ON_RETURN: 0.4,
+  /** Minimum hours away to trigger surprise */
+  MIN_HOURS_AWAY: 4,
+  /** Cooldown between surprises (hours) */
+  COOLDOWN_HOURS: 20,
+} as const;
+
+export type SurpriseType = 
+  | 'found_item'
+  | 'learned_trick'
+  | 'funny_moment'
+  | 'waiting_gift'
+  | 'dream'
+  | 'discovery';
+
+export interface DailySurprise {
+  id: string;
+  type: SurpriseType;
+  message: string;
+  emoji: string;
+  animation?: string;
+  vocalization?: 'chirp' | 'purr' | 'babble' | 'roar' | 'none';
+  /** Personality bias: positive = more likely if trait is high */
+  personalityBias?: Partial<LearnedPersonality>;
+  /** Minimum stage required */
+  minStage?: Stage;
+}
+
+export const DAILY_SURPRISES: DailySurprise[] = [
+  // === FOUND ITEMS ===
+  {
+    id: 'found_pebble',
+    type: 'found_item',
+    message: "Pyra found a shiny pebble and saved it for you!",
+    emoji: "💎",
+    animation: 'Idle_2',
+    vocalization: 'chirp',
+  },
+  {
+    id: 'found_sparkle',
+    type: 'found_item',
+    message: "Pyra dug up something sparkly in the grass!",
+    emoji: "✨",
+    animation: 'idle',
+    vocalization: 'chirp',
+  },
+  {
+    id: 'found_flower',
+    type: 'found_item',
+    message: "Pyra found a pretty flower and wants to show you!",
+    emoji: "🌸",
+    animation: 'Walk_Forward',
+    vocalization: 'purr',
+  },
+  {
+    id: 'found_feather',
+    type: 'found_item',
+    message: "Pyra caught a floating feather!",
+    emoji: "🪶",
+    animation: 'Idle_2',
+    vocalization: 'chirp',
+  },
+
+  // === LEARNED TRICKS (energy/obedience biased) ===
+  {
+    id: 'practiced_running',
+    type: 'learned_trick',
+    message: "Pyra practiced running while you were gone!",
+    emoji: "🏃",
+    animation: 'Run_Forward',
+    vocalization: 'chirp',
+    personalityBias: { energy: 30 },
+    minStage: Stage.PUPPY,
+  },
+  {
+    id: 'practiced_roar',
+    type: 'learned_trick',
+    message: "Pyra has been working on their roar!",
+    emoji: "🦖",
+    animation: 'ROAR',
+    vocalization: 'roar',
+    personalityBias: { obedience: -20, energy: 20 },
+    minStage: Stage.JUVENILE,
+  },
+  {
+    id: 'learned_spin',
+    type: 'learned_trick',
+    message: "Pyra learned to do a little spin!",
+    emoji: "💫",
+    animation: 'run to stop',
+    vocalization: 'chirp',
+    personalityBias: { energy: 20 },
+    minStage: Stage.PUPPY,
+  },
+  {
+    id: 'practiced_sneaking',
+    type: 'learned_trick',
+    message: "Pyra practiced sneaking around quietly!",
+    emoji: "🥷",
+    animation: 'walk slow loop',
+    vocalization: 'none',
+    personalityBias: { energy: -20, fearfulness: 10 },
+    minStage: Stage.PUPPY,
+  },
+
+  // === FUNNY MOMENTS ===
+  {
+    id: 'chased_tail',
+    type: 'funny_moment',
+    message: "Pyra chased their own tail while waiting!",
+    emoji: "😂",
+    animation: 'Run_Forward',
+    vocalization: 'chirp',
+    personalityBias: { energy: 40 },
+  },
+  {
+    id: 'chased_butterfly',
+    type: 'funny_moment',
+    message: "Pyra tried to catch a butterfly!",
+    emoji: "🦋",
+    animation: 'Idle_2',
+    vocalization: 'chirp',
+  },
+  {
+    id: 'funny_sleep',
+    type: 'funny_moment',
+    message: "Pyra fell asleep in a funny position!",
+    emoji: "😴",
+    animation: 'idle',
+    vocalization: 'purr',
+    personalityBias: { energy: -30 },
+  },
+  {
+    id: 'startled_shadow',
+    type: 'funny_moment',
+    message: "Pyra got startled by their own shadow!",
+    emoji: "👻",
+    animation: 'Retreat_Roar',
+    vocalization: 'chirp',
+    personalityBias: { fearfulness: 30 },
+  },
+  {
+    id: 'grass_roll',
+    type: 'funny_moment',
+    message: "Pyra rolled around in the grass for fun!",
+    emoji: "🌿",
+    animation: 'idle',
+    vocalization: 'purr',
+    personalityBias: { energy: 20 },
+  },
+
+  // === WAITING GIFT (attachment biased) ===
+  {
+    id: 'saved_spot',
+    type: 'waiting_gift',
+    message: "Pyra saved the best spot for you to sit together!",
+    emoji: "💕",
+    animation: 'idle',
+    vocalization: 'purr',
+    personalityBias: { attachment: 30 },
+  },
+  {
+    id: 'guarding_gift',
+    type: 'waiting_gift',
+    message: "Pyra has been guarding something special for you!",
+    emoji: "🎁",
+    animation: 'Idle_2',
+    vocalization: 'chirp',
+    personalityBias: { attachment: 20 },
+  },
+  {
+    id: 'waiting_by_entrance',
+    type: 'waiting_gift',
+    message: "Pyra was waiting right by the entrance for you!",
+    emoji: "🚪",
+    animation: 'Run_Forward',
+    vocalization: 'chirp',
+    personalityBias: { attachment: 40 },
+  },
+
+  // === DREAMS (stage-gated, trust/fear biased) ===
+  {
+    id: 'dream_playing',
+    type: 'dream',
+    message: "Pyra had a dream about playing with you!",
+    emoji: "💭",
+    animation: 'idle',
+    vocalization: 'purr',
+    personalityBias: { trustDisposition: 20 },
+    minStage: Stage.PUPPY,
+  },
+  {
+    id: 'dream_exploring',
+    type: 'dream',
+    message: "Pyra dreamed of exploring together!",
+    emoji: "🌟",
+    animation: 'Walk_Forward',
+    vocalization: 'chirp',
+    personalityBias: { fearfulness: -20, energy: 20 },
+    minStage: Stage.JUVENILE,
+  },
+  {
+    id: 'dream_scary',
+    type: 'dream',
+    message: "Pyra had a scary dream but feels better now that you're here.",
+    emoji: "🌙",
+    animation: 'idle',
+    vocalization: 'purr',
+    personalityBias: { fearfulness: 30, attachment: 20 },
+    minStage: Stage.PUPPY,
+  },
+  {
+    id: 'dream_food',
+    type: 'dream',
+    message: "Pyra dreamed about a mountain of snacks!",
+    emoji: "🍖",
+    animation: 'Idle_2',
+    vocalization: 'babble',
+    minStage: Stage.PUPPY,
+  },
+
+  // === DISCOVERY ===
+  {
+    id: 'cloud_shapes',
+    type: 'discovery',
+    message: "Pyra noticed the clouds look like food today!",
+    emoji: "☁️",
+    animation: 'idle',
+    vocalization: 'chirp',
+  },
+  {
+    id: 'watched_sunrise',
+    type: 'discovery',
+    message: "Pyra watched the sunrise and thought of you!",
+    emoji: "🌅",
+    animation: 'idle',
+    vocalization: 'purr',
+    personalityBias: { attachment: 20 },
+  },
+  {
+    id: 'counted_flowers',
+    type: 'discovery',
+    message: "Pyra tried to count all the flowers!",
+    emoji: "🌼",
+    animation: 'Walk_Forward',
+    vocalization: 'chirp',
+    minStage: Stage.JUVENILE,
+  },
+  {
+    id: 'made_friend',
+    type: 'discovery',
+    message: "Pyra made friends with a little bug!",
+    emoji: "🐛",
+    animation: 'Idle_2',
+    vocalization: 'chirp',
+    personalityBias: { fearfulness: -20 },
+  },
+];

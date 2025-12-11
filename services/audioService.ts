@@ -261,6 +261,126 @@ class AudioService {
     }
   }
 
+  // --- Celebration Sounds ---
+  playCelebration(type: 'fanfare' | 'milestone' | 'discovery' = 'fanfare') {
+    this.init();
+    if (!this.ctx || !this.masterGain) return;
+    
+    const t = this.ctx.currentTime;
+    
+    switch (type) {
+      case 'fanfare':
+        this.playFanfare(t);
+        break;
+      case 'milestone':
+        this.playMilestoneChime(t);
+        break;
+      case 'discovery':
+        this.playDiscoverySound(t);
+        break;
+    }
+  }
+
+  private playFanfare(t: number) {
+    if (!this.ctx || !this.masterGain) return;
+    
+    // Triumphant ascending chord: C5 → E5 → G5 → C6
+    const notes = [523.25, 659.25, 783.99, 1046.50];
+    
+    notes.forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      
+      const startTime = t + i * 0.12;
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.18, startTime + 0.04);
+      gain.gain.setValueAtTime(0.15, startTime + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+      
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.6);
+    });
+    
+    // Final shimmer
+    setTimeout(() => this.playShimmer(), 500);
+  }
+
+  private playShimmer() {
+    if (!this.ctx || !this.masterGain) return;
+    
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(2000, t);
+    osc.frequency.exponentialRampToValueAtTime(4000, t + 0.2);
+    
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    osc.start(t);
+    osc.stop(t + 0.5);
+  }
+
+  private playMilestoneChime(t: number) {
+    if (!this.ctx || !this.masterGain) return;
+    
+    // Two-note chime
+    const notes = [880, 1318.5]; // A5, E6
+    
+    notes.forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      
+      const startTime = t + i * 0.15;
+      gain.gain.setValueAtTime(0.12, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.6);
+      
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.7);
+    });
+  }
+
+  private playDiscoverySound(t: number) {
+    if (!this.ctx || !this.masterGain) return;
+    
+    // Curious ascending trill
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, t);
+    osc.frequency.linearRampToValueAtTime(900, t + 0.1);
+    osc.frequency.linearRampToValueAtTime(800, t + 0.2);
+    osc.frequency.linearRampToValueAtTime(1000, t + 0.3);
+    
+    gain.gain.setValueAtTime(0.1, t);
+    gain.gain.linearRampToValueAtTime(0.08, t + 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    osc.start(t);
+    osc.stop(t + 0.6);
+  } 
+
   playCrack() {
     this.init();
     if (!this.ctx || !this.masterGain) return;
