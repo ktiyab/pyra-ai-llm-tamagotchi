@@ -838,7 +838,7 @@ export const DAILY_SURPRISES: DailySurprise[] = [
     vocalization: 'chirp',
   },
 
-  // === LEARNED TRICKS (energy/obedience biased) ===
+  // === LEARNED TRICKS ===
   {
     id: 'practiced_running',
     type: 'learned_trick',
@@ -874,7 +874,7 @@ export const DAILY_SURPRISES: DailySurprise[] = [
     type: 'learned_trick',
     message: "Pyra practiced sneaking around quietly!",
     emoji: "🥷",
-    animation: 'walk slow loop',
+    animation: 'Walk_Forward',  // FIXED: Changed from 'walk slow loop'
     vocalization: 'none',
     personalityBias: { energy: -20, fearfulness: 10 },
     minStage: Stage.PUPPY,
@@ -926,7 +926,7 @@ export const DAILY_SURPRISES: DailySurprise[] = [
     personalityBias: { energy: 20 },
   },
 
-  // === WAITING GIFT (attachment biased) ===
+  // === WAITING GIFT ===
   {
     id: 'saved_spot',
     type: 'waiting_gift',
@@ -955,7 +955,7 @@ export const DAILY_SURPRISES: DailySurprise[] = [
     personalityBias: { attachment: 40 },
   },
 
-  // === DREAMS (stage-gated, trust/fear biased) ===
+  // === DREAMS ===
   {
     id: 'dream_playing',
     type: 'dream',
