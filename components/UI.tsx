@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { GameState, Stage, GameContextType, TimeOfDay, PointNotification, LearnedPersonality, SignificantMemory, PersonalityDimension, CareGrade } from '../types';
 import { audioService } from '../services/audioService';
 import { POINT_NOTIFICATION_CONFIG, PERSONALITY_CONFIG, PERSONALITY_DESCRIPTORS } from '../constants';
@@ -56,6 +56,9 @@ const Icons = {
   ),
   X: ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  ),
+  Card: ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
   ),
 };
 
@@ -196,9 +199,10 @@ interface PersonalityPanelProps {
   dominantTraits: string[];
   careGrade: CareGrade;
   onOpenMemories: () => void;
+  onOpenCard: () => void; // FIXED: Add this prop
 }
 
-const PersonalityPanel: React.FC<PersonalityPanelProps> = ({ personality, dominantTraits, careGrade, onOpenMemories }) => {
+const PersonalityPanel: React.FC<PersonalityPanelProps> = ({ personality, dominantTraits, careGrade, onOpenMemories, onOpenCard }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const gradeConfig = CARE_GRADE_CONFIG[careGrade];
 
@@ -238,10 +242,25 @@ const PersonalityPanel: React.FC<PersonalityPanelProps> = ({ personality, domina
             ))}
           </div>
 
-          <button onClick={onOpenMemories} className="w-full flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors">
-            <Icons.Book className="w-4 h-4 text-cyan-400" />
-            <span className="text-xs text-stone-300">View Memories</span>
-          </button>
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <button 
+              onClick={onOpenMemories} 
+              className="flex-1 flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
+            >
+              <Icons.Book className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs text-stone-300">Memories</span>
+            </button>
+            
+            {/* FIXED: Add PyraCard button */}
+            <button 
+              onClick={onOpenCard} 
+              className="flex-1 flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
+            >
+              <Icons.Card className="w-4 h-4 text-pink-400" />
+              <span className="text-xs text-stone-300">Share Card</span>
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -481,6 +500,339 @@ const MemoryJournal: React.FC<MemoryJournalProps> = ({ memories, isOpen, onClose
 };
 
 // =============================================
+// PYRA CARD - SHAREABLE IDENTITY
+// =============================================
+
+interface PyraCardProps {
+  state: GameState;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Calculate creature colors from seed (matching Scene.tsx logic)
+  const creatureColors = useMemo(() => {
+    const { baseHue, saturation, lightness } = state.seed.appearance;
+    
+    // Body color
+    const bodyH = baseHue;
+    const bodyS = saturation;
+    const bodyL = lightness;
+    
+    // Eye color (complementary hue)
+    const eyeH = (baseHue + 180) % 360;
+    const eyeS = 90;
+    const eyeL = 60;
+    
+    // Accent color (slightly shifted)
+    const accentH = (baseHue + 30) % 360;
+    const accentS = Math.min(100, saturation + 10);
+    const accentL = Math.min(70, lightness + 15);
+    
+    return {
+      body: `hsl(${bodyH}, ${bodyS}%, ${bodyL}%)`,
+      bodyDark: `hsl(${bodyH}, ${bodyS}%, ${Math.max(20, bodyL - 20)}%)`,
+      bodyLight: `hsl(${bodyH}, ${Math.max(30, bodyS - 20)}%, ${Math.min(85, bodyL + 25)}%)`,
+      eye: `hsl(${eyeH}, ${eyeS}%, ${eyeL}%)`,
+      accent: `hsl(${accentH}, ${accentS}%, ${accentL}%)`,
+      gradient: `linear-gradient(135deg, hsl(${bodyH}, ${bodyS}%, ${bodyL}%) 0%, hsl(${accentH}, ${accentS}%, ${accentL}%) 100%)`,
+    };
+  }, [state.seed.appearance]);
+
+  // Stage emoji and label
+  const stageInfo = useMemo(() => {
+    const info: Record<Stage, { emoji: string; label: string }> = {
+      [Stage.EGG]: { emoji: '🥚', label: 'Egg' },
+      [Stage.HATCHLING]: { emoji: '🐣', label: 'Hatchling' },
+      [Stage.PUPPY]: { emoji: '🦖', label: 'Puppy' },
+      [Stage.JUVENILE]: { emoji: '🦕', label: 'Juvenile' },
+      [Stage.ADOLESCENT]: { emoji: '🐲', label: 'Adolescent' },
+      [Stage.ADULT]: { emoji: '👑', label: 'Adult' },
+    };
+    return info[state.stage] || info[Stage.EGG];
+  }, [state.stage]);
+
+  // Most meaningful memory for quote
+  const featuredMemory = useMemo(() => {
+    const memories = state.learnedBehavior.memories;
+    if (memories.length === 0) return null;
+    
+    // Prioritize: milestones > high impact > recent
+    const sorted = [...memories].sort((a, b) => {
+      if (a.isMilestone !== b.isMilestone) return a.isMilestone ? -1 : 1;
+      const impactA = Object.values(a.personalityImpact).reduce((s, v) => s + Math.abs(v || 0), 0);
+      const impactB = Object.values(b.personalityImpact).reduce((s, v) => s + Math.abs(v || 0), 0);
+      if (impactA !== impactB) return impactB - impactA;
+      return b.timestamp - a.timestamp;
+    });
+    
+    return sorted[0];
+  }, [state.learnedBehavior.memories]);
+
+  // Days together
+  const daysTogether = Math.floor(state.ageHours / 24);
+
+  // Generate share text
+  const generateShareText = useCallback(() => {
+    const name = state.name || 'Pyra';
+    const traits = state.learnedBehavior.aggregates.dominantTraits;
+    const grade = state.learnedBehavior.aggregates.careGrade;
+    
+    let text = `🦖 Meet ${name}!\n`;
+    text += `${stageInfo.emoji} ${stageInfo.label} • ${daysTogether} days together\n`;
+    
+    if (traits.length > 0) {
+      text += `✨ ${traits.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ')}\n`;
+    }
+    
+    text += `💝 Care Grade: ${grade}\n`;
+    
+    if (state.streak.current > 1) {
+      text += `🔥 ${state.streak.current} day streak!\n`;
+    }
+    
+    if (featuredMemory) {
+      text += `\n"${featuredMemory.narrative}"`;
+    }
+    
+    text += '\n\n#Pyra #VirtualPet';
+    
+    return text;
+  }, [state, stageInfo, daysTogether, featuredMemory]);
+
+  // Share handler
+  const handleShare = useCallback(async () => {
+    const shareText = generateShareText();
+    
+    // Try Web Share API first
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${state.name || 'Pyra'} - My Virtual Companion`,
+          text: shareText,
+        });
+        return;
+      } catch (err) {
+        // User cancelled or error - fall through to clipboard
+        if ((err as Error).name === 'AbortError') return;
+      }
+    }
+    
+    // Fallback to clipboard
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      setShareError('Could not copy to clipboard');
+      setTimeout(() => setShareError(null), 2000);
+    }
+  }, [generateShareText, state.name]);
+
+  // Keyboard handler
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const { aggregates } = state.learnedBehavior;
+  const gradeConfig = CARE_GRADE_CONFIG[aggregates.careGrade];
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 pointer-events-auto">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
+      
+      {/* Card Container */}
+      <div 
+        ref={cardRef}
+        className="relative w-full max-w-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* The Card */}
+        <div 
+          className="relative overflow-hidden rounded-3xl shadow-2xl border-2 border-white/20"
+          style={{ background: creatureColors.gradient }}
+        >
+          {/* Decorative Pattern Overlay */}
+          <div 
+            className="absolute inset-0 opacity-10"
+            style={{
+              backgroundImage: `radial-gradient(circle at 20% 80%, ${creatureColors.eye} 0%, transparent 50%),
+                               radial-gradient(circle at 80% 20%, ${creatureColors.accent} 0%, transparent 50%)`,
+            }}
+          />
+          
+          {/* Content */}
+          <div className="relative p-6 space-y-4">
+            
+            {/* Header: Avatar + Name + Stage */}
+            <div className="flex items-center gap-4">
+              {/* Creature Avatar Circle */}
+              <div 
+                className="w-20 h-20 rounded-full flex items-center justify-center border-4 shadow-lg"
+                style={{ 
+                  backgroundColor: creatureColors.bodyDark,
+                  borderColor: creatureColors.bodyLight,
+                }}
+              >
+                {/* Simple creature representation */}
+                <div className="relative">
+                  <span className="text-4xl">{stageInfo.emoji}</span>
+                  {/* Eye glow dots */}
+                  <div 
+                    className="absolute top-1 left-2 w-2 h-2 rounded-full animate-pulse"
+                    style={{ backgroundColor: creatureColors.eye, boxShadow: `0 0 8px ${creatureColors.eye}` }}
+                  />
+                  <div 
+                    className="absolute top-1 right-2 w-2 h-2 rounded-full animate-pulse"
+                    style={{ backgroundColor: creatureColors.eye, boxShadow: `0 0 8px ${creatureColors.eye}`, animationDelay: '0.5s' }}
+                  />
+                </div>
+              </div>
+              
+              {/* Name + Stage */}
+              <div className="flex-1">
+                <h1 className="text-3xl font-black text-white drop-shadow-lg leading-tight">
+                  {state.name || 'Pyra'}
+                </h1>
+                <div className="flex items-center gap-2 mt-1">
+                  <span 
+                    className="px-3 py-0.5 rounded-full text-sm font-bold uppercase tracking-wider"
+                    style={{ backgroundColor: creatureColors.bodyDark, color: creatureColors.bodyLight }}
+                  >
+                    {stageInfo.label}
+                  </span>
+                  {state.streak.current > 1 && (
+                    <span className="flex items-center gap-1 text-amber-300 text-sm font-bold">
+                      🔥 {state.streak.current}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Row */}
+            <div className="flex items-center justify-between px-2">
+              {/* Days Together */}
+              <div className="text-center">
+                <div className="text-2xl font-black text-white">{daysTogether}</div>
+                <div className="text-xs text-white/70 uppercase tracking-wider">Days</div>
+              </div>
+              
+              {/* Care Grade */}
+              <div className="text-center">
+                <div 
+                  className="text-2xl font-black"
+                  style={{ color: gradeConfig.color }}
+                >
+                  {aggregates.careGrade}
+                </div>
+                <div className="text-xs text-white/70 uppercase tracking-wider">Grade</div>
+              </div>
+              
+              {/* Trust */}
+              <div className="text-center">
+                <div className="text-2xl font-black text-white">{Math.round(state.bond.trust)}</div>
+                <div className="text-xs text-white/70 uppercase tracking-wider">Trust</div>
+              </div>
+              
+              {/* Memories */}
+              <div className="text-center">
+                <div className="text-2xl font-black text-white">{state.learnedBehavior.memories.length}</div>
+                <div className="text-xs text-white/70 uppercase tracking-wider">Memories</div>
+              </div>
+            </div>
+
+            {/* Dominant Traits */}
+            {aggregates.dominantTraits.length > 0 && (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {aggregates.dominantTraits.map(trait => (
+                  <span 
+                    key={trait}
+                    className="px-3 py-1 rounded-full text-sm font-bold capitalize"
+                    style={{ 
+                      backgroundColor: 'rgba(255,255,255,0.2)', 
+                      color: 'white',
+                      backdropFilter: 'blur(4px)',
+                    }}
+                  >
+                    {trait}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Featured Memory Quote */}
+            {featuredMemory && (
+              <div 
+                className="relative p-4 rounded-xl mt-2"
+                style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
+              >
+                <span className="absolute -top-2 left-3 text-2xl opacity-50">"</span>
+                <p className="text-white/90 text-sm italic text-center leading-relaxed">
+                  {featuredMemory.narrative}
+                </p>
+                <span className="absolute -bottom-3 right-3 text-2xl opacity-50">"</span>
+              </div>
+            )}
+
+            {/* Appearance Info */}
+            <div className="flex items-center justify-center gap-4 text-xs text-white/60">
+              <span className="capitalize">{state.seed.appearance.scalePattern} scales</span>
+              <span>•</span>
+              <span className="capitalize">{state.seed.appearance.size} size</span>
+            </div>
+
+            {/* Share Button */}
+            <button
+              onClick={handleShare}
+              className="w-full py-3 rounded-xl font-bold text-lg transition-all active:scale-95"
+              style={{ 
+                backgroundColor: creatureColors.bodyDark,
+                color: creatureColors.bodyLight,
+              }}
+            >
+              {copySuccess ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span>✓</span> Copied to Clipboard!
+                </span>
+              ) : shareError ? (
+                <span className="text-red-300">{shareError}</span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <span>📤</span> Share My Pyra
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Close Button */}
+        <button 
+          onClick={onClose}
+          className="absolute -top-3 -right-3 w-10 h-10 bg-stone-800 hover:bg-stone-700 border-2 border-white/20 rounded-full flex items-center justify-center transition-colors shadow-lg"
+        >
+          <Icons.X className="w-5 h-5 text-white" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// =============================================
 // MOOD INDICATOR
 // =============================================
 const MoodIndicator = ({ emotion }: { emotion: string }) => {
@@ -622,7 +974,7 @@ const StatRow = ({ emoji, label, value, colorBase, tooltipText, isTrust = false 
 // STATS PANEL
 // =============================================
 // FIXED: Update StatsPanel component
-const StatsPanel = ({ game, onOpenMemories }: { game: GameContextType; onOpenMemories: () => void }) => {
+const StatsPanel = ({ game, onOpenMemories, onOpenCard }: { game: GameContextType; onOpenMemories: () => void; onOpenCard: () => void; }) => {
   const { state } = game;
   const [isExpanded, setIsExpanded] = useState(false);
   const isEgg = state.stage === Stage.EGG;
@@ -687,6 +1039,7 @@ const StatsPanel = ({ game, onOpenMemories }: { game: GameContextType; onOpenMem
               dominantTraits={state.learnedBehavior.aggregates.dominantTraits}
               careGrade={state.learnedBehavior.aggregates.careGrade}
               onOpenMemories={onOpenMemories}
+              onOpenCard={onOpenCard}
             />
             <ObedienceHistoryPanel
               obedienceHistory={state.obedienceHistory}
@@ -807,6 +1160,7 @@ const UI: React.FC<UIProps> = ({ game }) => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [isMuted, setIsMuted] = useState(!audioService.isAmbientPlaying());
   const [showMemories, setShowMemories] = useState(false);
+  const [showPyraCard, setShowPyraCard] = useState(false);
 
   useEffect(() => { if (state.stage === Stage.HATCHLING) setIsMuted(false); }, [state.stage]);
 
@@ -835,9 +1189,12 @@ const UI: React.FC<UIProps> = ({ game }) => {
       {/* Memory Journal Modal - FIXED: Now properly interactive */}
       <MemoryJournal memories={state.learnedBehavior.memories} isOpen={showMemories} onClose={() => setShowMemories(false)} />
 
+      {/* FIXED: Add PyraCard Modal */}
+      <PyraCard state={state} isOpen={showPyraCard} onClose={() => setShowPyraCard(false)} />
+
       {/* TOP AREA */}
       <div className="pointer-events-auto w-full flex flex-col md:flex-row items-start justify-between gap-4 relative z-50">
-        <StatsPanel game={game} onOpenMemories={() => setShowMemories(true)} />
+        <StatsPanel game={game} onOpenMemories={() => setShowMemories(true)} onOpenCard={() => setShowPyraCard(true)} />
 
         {/* Control Buttons */}
         <div className="flex items-center gap-2 p-2 bg-black/30 backdrop-blur-xl border border-white/10 rounded-full shadow-lg">
