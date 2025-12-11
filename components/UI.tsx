@@ -523,6 +523,8 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
   const [portrait, setPortrait] = useState<string | null>(null);
   const [isGeneratingPortrait, setIsGeneratingPortrait] = useState(false);
   const [portraitError, setPortraitError] = useState(false);
+  // FIXED: Add ref to track generation in progress (after other useState declarations)
+  const isGeneratingRef = useRef(false);
 
   // Calculate creature colors from seed (matching Scene.tsx logic)
   const creatureColors = useMemo(() => {
@@ -582,21 +584,39 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
   const daysTogether = Math.floor(state.ageHours / 24);
 
   // Load or generate portrait when card opens
+  // FIXED: Replace the portrait generation useEffect with this guarded version
   useEffect(() => {
     if (!isOpen) return;
     
+    // Reset error state
     setPortraitError(false);
     
+    // Check cache first (using specific values, not whole state)
     const cached = getCachedPortrait(state.seed.id, state.stage);
     if (cached) {
       setPortrait(cached);
       return;
     }
     
+    // Guard against multiple simultaneous calls
+    if (isGeneratingRef.current) {
+      return;
+    }
+    
+    // Already have a portrait? Don't regenerate
+    if (portrait) {
+      return;
+    }
+    
     const generatePortrait = async () => {
+      // Double-check guard
+      if (isGeneratingRef.current) return;
+      isGeneratingRef.current = true;
+      
       const hasCapability = await hasImageGenerationCapability();
       if (!hasCapability) {
         setPortrait(null);
+        isGeneratingRef.current = false;
         return;
       }
       
@@ -610,11 +630,18 @@ const PyraCard: React.FC<PyraCardProps> = ({ state, isOpen, onClose }) => {
         setPortraitError(true);
       } finally {
         setIsGeneratingPortrait(false);
+        isGeneratingRef.current = false;
       }
     };
     
     generatePortrait();
-  }, [isOpen, state]);
+    
+    // Cleanup: reset ref if component unmounts during generation
+    return () => {
+      isGeneratingRef.current = false;
+    };
+  // FIXED: Only depend on specific values, not entire state object
+  }, [isOpen, state.seed.id, state.stage, portrait]);
 
   // Generate share text
   const generateShareText = useCallback(() => {
