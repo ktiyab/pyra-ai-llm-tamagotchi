@@ -4,7 +4,7 @@ import {
   PointNotification, PointType, RewardHistoryEntry, ObedienceRecord,
   PersonalityDimension, LearnedBehavior, SignificantMemory, VocabularySentiment,
   VocabularySource, PreferenceEntry, InteractionPatternEntry, MemoryCategory,
-  CelebrationData, CelebrationTracking, StreakData,
+  CelebrationData, CelebrationTracking, StreakData, ChatMessage,
 } from '../types';
 import { generateSeed } from '../utils';
 import {
@@ -646,6 +646,75 @@ const checkStreakMilestone = (
 };
 
 // =============================================
+// KINDNESS REINFORCEMENT NARRATION
+// =============================================
+
+interface KindnessNarration {
+  message: string;
+  isEducational: boolean;
+}
+
+/**
+ * Generates narrator messages to teach kindness lessons in real-time.
+ * Only triggers for significant trust changes from conversation.
+ */
+const getKindnessNarration = (
+  trustDelta: number,
+  stage: Stage,
+  currentTrust: number
+): KindnessNarration | null => {
+  // Skip for eggs (can't understand) or tiny changes
+  if (stage === Stage.EGG) return null;
+  if (Math.abs(trustDelta) < 2) return null;
+  
+  // Positive reinforcement (kind words)
+  if (trustDelta >= 5) {
+    const messages = [
+      { message: "Pyra's eyes light up! Kind words make them feel safe. 💚", isEducational: true },
+      { message: "Pyra chirps happily! Your kindness is building trust. 💚", isEducational: true },
+      { message: "Pyra leans closer. Words like these mean everything. 💚", isEducational: true },
+    ];
+    return messages[Math.floor(Math.random() * messages.length)];
+  }
+  
+  if (trustDelta >= 3) {
+    const messages = [
+      { message: "Pyra seems comforted by your words.", isEducational: false },
+      { message: "Pyra's tail wags a little faster.", isEducational: false },
+    ];
+    return messages[Math.floor(Math.random() * messages.length)];
+  }
+  
+  // Negative reinforcement (harsh words)
+  if (trustDelta <= -5) {
+    const messages = [
+      { message: "Pyra flinches... They'll remember how that felt. 💔", isEducational: true },
+      { message: "Pyra shrinks back. Harsh words leave marks on the heart. 💔", isEducational: true },
+      { message: "Pyra looks away, hurt. Words have power. 💔", isEducational: true },
+    ];
+    return messages[Math.floor(Math.random() * messages.length)];
+  }
+  
+  if (trustDelta <= -3) {
+    const messages = [
+      { message: "Pyra seems unsettled by your tone...", isEducational: false },
+      { message: "Pyra's eyes dim for a moment.", isEducational: false },
+    ];
+    return messages[Math.floor(Math.random() * messages.length)];
+  }
+  
+  // Recovery narration (trust was low, now improving)
+  if (currentTrust < 30 && trustDelta > 0) {
+    return { 
+      message: "Pyra is starting to feel safe again. Keep being gentle. 🌱", 
+      isEducational: true 
+    };
+  }
+  
+  return null;
+};
+
+// =============================================
 // GAME REDUCER
 // =============================================
 
@@ -856,6 +925,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       let rewardReason = 'Conversation';
       const prevTrust = state.bond.trust; // NEW: Track for milestone check
 
+      // FIXED: Declare kindnessNarratorMessage at case block scope
+      let kindnessNarratorMessage: ChatMessage | null = null;
+
       // Process stats_delta with personality modifiers
       if (response.stats_delta) {
         const trustMult = TRUST_CONFIG.STAGE_MULTIPLIERS[state.stage] ?? 1.0;
@@ -880,12 +952,34 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         if (trustDelta !== 0 && shouldShowNotification(notifications, 'trust', 500)) {
           notifications.push(createPointNotification('trust', Math.round(trustDelta * 100) / 100, rewardReason));
         }
+        // FIXED: Add kindness reinforcement narrator messages
+        // Only for significant trust changes from conversation (not commands)
+        if (response.stats_delta && !response.obedience?.command_detected) {
+          const kindnessNarration = getKindnessNarration(trustDelta, state.stage, state.bond.trust);
+          if (kindnessNarration) {
+            // Dispatch narrator message - will be added to messages in the return
+            // We'll handle this in the final state update
+          }
+        }        
         if (loveDelta !== 0 && shouldShowNotification(notifications, 'love', 500)) {
           notifications.push(createPointNotification('love', Math.round(loveDelta * 100) / 100, loveDelta > 0 ? 'Felt loved' : 'Felt ignored'));
         }
         if (energyDelta !== 0 && shouldShowNotification(notifications, 'energy', 500)) {
           notifications.push(createPointNotification('energy', Math.round(energyDelta * 100) / 100, energyDelta > 0 ? 'Excited!' : 'Tired out'));
         }
+        // FIXED: Add kindness reinforcement narrator message
+        let kindnessNarratorMessage: ChatMessage | null = null;
+        if (!response.obedience?.command_detected && Math.abs(trustDelta) >= 2) {
+          const kindnessNarration = getKindnessNarration(trustDelta, state.stage, prevTrust);
+          if (kindnessNarration) {
+            kindnessNarratorMessage = {
+              id: crypto.randomUUID(),
+              role: 'narrator' as const,
+              text: kindnessNarration.message,
+              timestamp: Date.now() + 100, // Slightly after main response
+            };
+          }
+        }        
       }
 
       // Process obedience with personality modifier
@@ -1043,6 +1137,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         learnedBehavior,
         activeCelebration,
         celebrationHistory,
+        // FIXED: Append kindness narrator message if it exists
+        messages: kindnessNarratorMessage 
+          ? [...state.messages, kindnessNarratorMessage]
+          : state.messages,        
       };
     }
 

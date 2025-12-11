@@ -509,6 +509,86 @@ const MoodIndicator = ({ emotion }: { emotion: string }) => {
 };
 
 // =============================================
+// STREAK BADGE COMPONENT
+// =============================================
+const StreakBadge: React.FC<{ current: number; longest: number }> = ({ current, longest }) => {
+  if (current === 0) return null;
+  
+  const isNewRecord = current >= longest && current > 1;
+  
+  return (
+    <div className="group relative flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 border border-amber-500/30 rounded-full cursor-help">
+      <span className="text-amber-400 text-sm">🔥</span>
+      <span className={`text-xs font-bold ${isNewRecord ? 'text-amber-300' : 'text-amber-400'}`}>
+        {current}
+      </span>
+      {isNewRecord && <span className="text-[10px] text-amber-300">✨</span>}
+      
+      {/* Tooltip */}
+      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2 bg-stone-900/95 border border-white/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap">
+        <div className="text-xs text-white font-bold">{current} day streak!</div>
+        <div className="text-[10px] text-stone-400">Best: {longest} days</div>
+        <div className="text-[10px] text-amber-400 mt-1">Keep visiting daily! 🌟</div>
+      </div>
+    </div>
+  );
+};
+
+// =============================================
+// HATCHLING PROGRESS BAR (Learning to Speak)
+// =============================================
+const HatchlingProgressBar: React.FC<{ ageHours: number }> = ({ ageHours }) => {
+  // HATCHLING evolves to PUPPY at 72 hours
+  const PUPPY_THRESHOLD = 72;
+  const progress = Math.min(100, (ageHours / PUPPY_THRESHOLD) * 100);
+  const hoursRemaining = Math.max(0, PUPPY_THRESHOLD - ageHours);
+  
+  // Milestone messages based on progress
+  const getMessage = () => {
+    if (progress < 25) return "Pyra is listening to your voice...";
+    if (progress < 50) return "Pyra is starting to recognize sounds!";
+    if (progress < 75) return "Pyra understands your tone now!";
+    if (progress < 95) return "Pyra is almost ready to speak!";
+    return "Any moment now...! 🎉";
+  };
+  
+  return (
+    <div className="p-3 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-base">🗣️</span>
+        <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">
+          Learning to Speak
+        </span>
+      </div>
+      
+      {/* Progress bar */}
+      <div className="h-2 w-full bg-stone-800/50 rounded-full overflow-hidden mb-2">
+        <div 
+          className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-1000 ease-out"
+          style={{ 
+            width: `${Math.max(5, progress)}%`,
+            boxShadow: '0 0 10px rgba(168, 85, 247, 0.5)'
+          }}
+        />
+      </div>
+      
+      {/* Status text */}
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-purple-200/80 italic">{getMessage()}</span>
+        <span className="text-stone-500">
+          {hoursRemaining > 1 ? `~${Math.ceil(hoursRemaining)}h` : 'Soon!'}
+        </span>
+      </div>
+      
+      {/* Tip */}
+      <div className="mt-2 pt-2 border-t border-white/5 text-[10px] text-stone-500">
+        💡 Keep talking! Pyra learns from your voice.
+      </div>
+    </div>
+  );
+};
+
+// =============================================
 // STAT ROW
 // =============================================
 const StatRow = ({ emoji, label, value, colorBase, tooltipText, isTrust = false }: { emoji?: string; label: string; value: number; colorBase: string; tooltipText: string; isTrust?: boolean }) => {
@@ -541,10 +621,12 @@ const StatRow = ({ emoji, label, value, colorBase, tooltipText, isTrust = false 
 // =============================================
 // STATS PANEL
 // =============================================
+// FIXED: Update StatsPanel component
 const StatsPanel = ({ game, onOpenMemories }: { game: GameContextType; onOpenMemories: () => void }) => {
   const { state } = game;
   const [isExpanded, setIsExpanded] = useState(false);
   const isEgg = state.stage === Stage.EGG;
+  const isHatchling = state.stage === Stage.HATCHLING; // FIXED: Add this
   const isSleeping = state.timeOfDay === 'night' || state.currentEmotion === 'tired';
 
   return (
@@ -565,7 +647,11 @@ const StatsPanel = ({ game, onOpenMemories }: { game: GameContextType; onOpenMem
             <div className="text-[10px] text-stone-400 uppercase tracking-widest font-bold mt-0.5 opacity-60">{state.stage}</div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2"> {/* FIXED: Changed gap-3 to gap-2 */}
+          {/* FIXED: Add streak badge for non-egg stages */}
+          {!isEgg && state.streak.current > 0 && (
+            <StreakBadge current={state.streak.current} longest={state.streak.longest} />
+          )}
           <MoodIndicator emotion={state.currentEmotion} />
           <div className="md:hidden text-stone-500">{isExpanded ? <Icons.ChevronUp className="w-4 h-4" /> : <Icons.ChevronDown className="w-4 h-4" />}</div>
         </div>
@@ -583,6 +669,11 @@ const StatsPanel = ({ game, onOpenMemories }: { game: GameContextType; onOpenMem
           <StatRow emoji="✨" label="Growth" value={state.eggCrackLevel} colorBase="#a78bfa" tooltipText="Life stirs inside..." />
         ) : (
           <>
+            {/* FIXED: Add Hatchling progress bar */}
+            {isHatchling && (
+              <HatchlingProgressBar ageHours={state.ageHours} />
+            )}
+            
             <StatRow emoji="🍖" label="Hunger" value={state.needs.hunger} colorBase="#f9c74f" tooltipText={state.needs.hunger < 30 ? "Running on empty!" : "Belly full."} />
             <StatRow emoji="❤️" label="Love" value={state.needs.attention} colorBase="#f4845f" tooltipText="Heart needs filling." />
             <StatRow emoji="⚽" label="Energy" value={state.needs.play} colorBase="#90be6d" tooltipText={state.needs.play < 30 ? "Needs to play!" : "Feeling energetic."} />
@@ -597,7 +688,6 @@ const StatsPanel = ({ game, onOpenMemories }: { game: GameContextType; onOpenMem
               careGrade={state.learnedBehavior.aggregates.careGrade}
               onOpenMemories={onOpenMemories}
             />
-            {/* FIXED: Added Obedience History Panel for training discoverability */}
             <ObedienceHistoryPanel
               obedienceHistory={state.obedienceHistory}
               stage={state.stage}
