@@ -35,13 +35,15 @@
   <script type="importmap">
 {
   "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
-    "@react-three/fiber": "https://aistudiocdn.com/@react-three/fiber@^9.4.2",
-    "@react-three/drei": "https://aistudiocdn.com/@react-three/drei@^10.7.7",
-    "three": "https://aistudiocdn.com/three@^0.181.2"
+    "react": "https://esm.sh/react@19.2.1",
+    "react/": "https://esm.sh/react@19.2.1/",
+    "react-dom": "https://esm.sh/react-dom@19.2.1?external=react",
+    "react-dom/": "https://esm.sh/react-dom@19.2.1&external=react/",
+    "react-dom/client": "https://esm.sh/react-dom@19.2.1/client?external=react",
+    "three": "https://esm.sh/three@0.181.2",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@9.4.2?external=react,react-dom,three",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@10.7.7?external=react,react-dom,three,@react-three/fiber",
+    "@google/genai": "https://esm.sh/@google/genai@1.33.0"
   }
 }
 </script>

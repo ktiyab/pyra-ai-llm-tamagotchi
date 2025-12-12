@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useReducer, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useReducer, useRef } from 'react';
 import { 
   GameState, GameAction, Stage, Needs, Seed, LLMResponse, TimeOfDay, 
   PointNotification, PointType, RewardHistoryEntry, ObedienceRecord,
