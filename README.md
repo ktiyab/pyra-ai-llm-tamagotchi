@@ -540,5 +540,3 @@ The research supports this positioning with unusual strength. The main strategic
 
 ---
 
-
----
